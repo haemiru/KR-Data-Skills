@@ -17,7 +17,10 @@
 - git 작업은 **이 폴더 안에서만** 한다. 부모에서 `git add .` 금지
 - 커밋 전에 `git rev-parse --show-toplevel`이 `D:/Claude-prj/KR-Data-Skills`인지 확인
 - **부모 `D:\Claude-prj\CLAUDE.md`는 건드리지 않는다** (사용자 지시)
-- `.env`는 절대 커밋하지 않는다 (`.gitignore`에 있음).
+- **`.env`는 저장소 루트에 둔다** (`D:\Claude-prj\KR-Data-Skills\.env`).
+  홈(`~/.env`)이 아니다 — 2026-08-05에 옮겼다. 래퍼는 현재 디렉터리에서
+  `.git`이 있는 곳까지 거슬러 올라가며 찾으므로 하위 폴더에서 실행해도 된다
+- `.env`는 절대 커밋하지 않는다 (`.gitignore`에 있음. `.env.example`만 커밋).
   **공개 저장소이므로 푸시 전 `git ls-files`로 한 번 더 확인할 것**
 
 ## 범위
@@ -34,7 +37,7 @@
 2. **라이선스 게이트** — `.licenses/<skill>_LICENSE.txt`가 없으면 약관 고지 후
    문구+타임스탬프를 기록하고 진행. SKILL.md 사전조건에 명시한다
 3. **인증키 값 비노출** — `grep -sq`로 존재만 확인. 에러 메시지 마스킹까지 구현.
-   `cat ~/.env` / `echo $KEY` 절대 금지
+   `cat .env` / `echo $KEY` 절대 금지
 4. **MCP가 아니라 CLI 래퍼** — 토큰 효율 때문에 의도적으로 택한 구조다
 
 ### 구조

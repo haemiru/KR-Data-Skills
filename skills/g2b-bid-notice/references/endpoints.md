@@ -121,13 +121,35 @@ getBidPblancListInfoServcPrtcptPsblRgn  getBidPblancListInfoChangeHistory
 |---|---|---|
 | `serviceKey` | ✅ | 인증키. 래퍼가 Encoding/Decoding 형태를 자동 판별한다 |
 | `type` | | `json` (기본값은 XML이다. 래퍼는 항상 json을 보낸다) |
-| `inqryDiv` | ✅ | 조회구분. 래퍼 기본값 `1`. **업무구분마다 의미가 다를 수 있다 — 미검증** |
+| `inqryDiv` | ✅ | 조회구분. 래퍼 기본값 `1`. **실측 확정 — 아래 표 참조** |
 | `inqryBgnDt` / `inqryEndDt` | ✅ | 조회 기간. `YYYYMMDDHHMM` |
 | `pageNo` | | 페이지 번호 (1부터) |
 | `numOfRows` | | 페이지당 건수. **상한 999**. 1000 이상은 에러 |
 
-`...PPSSrch` 계열은 여기에 `bidNtceNm` `ntceInsttNm` `dminsttNm` `prtcptLmtRgnNm`
-`indstrytyNm` `indstrytyCd` `presmptPrceBgn` `presmptPrceEnd` `refNo`를 더 받는다.
+### `inqryDiv` — 실측 확정 (2026-08-05, 용역 7일 창)
+
+| 값 | 결과 | 의미 |
+|---|---|---|
+| `1` | 2447건 | **공고게시일시 기준.** 일반 조회는 이것 |
+| `2` | 0건 (정상 응답) | 날짜 범위로는 아무것도 안 나온다. 다른 파라미터를 요구하는 모드로 추정 — **미확정** |
+| `3` | 12건 | **변경일시 기준.** `chgDt`가 채워진다 |
+
+`inqryDiv=3`의 결과 집합은 `change-history`와 **완전히 일치**한다(공고번호 기준
+교집합 12 / 차집합 0). 차이는 3이 공고 전체 필드를, `change-history`가
+변경 항목(`chgItemNm`/`bfchgVal`/`afchgVal`)을 준다는 점이다.
+
+### `...PPSSrch` 계열 추가 파라미터 — 실측 동작 확인
+
+`bidNtceNm` `ntceInsttNm` `dminsttNm` `prtcptLmtRgnNm` `indstrytyNm`
+`indstrytyCd` `presmptPrceBgn` `presmptPrceEnd` `refNo`
+
+용역 7일 기준선 2447건에서 실제로 좁혀지는 것을 확인했다:
+`bidNtceNm=청소` → 29건 · `prtcptLmtRgnNm=충청북도` → 52건 ·
+`presmptPrceBgn=100000000` → 897건 · `dminsttNm=서울특별시` → 103건.
+
+> ⚠️ **`prtcptLmtRgnNm` `indstrytyNm` `indstrytyCd`는 요청 전용이다.**
+> 응답 필드에는 없다. 필터는 먹지만 결과에서 그 값을 되읽을 수 없다.
+> 자세한 내용과 우회 방법은 `fields.md` §3.7·§4.
 
 ## 에러 코드
 

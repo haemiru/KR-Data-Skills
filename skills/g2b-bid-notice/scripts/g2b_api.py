@@ -70,7 +70,7 @@ ERROR_HINTS = {
     "(옛 경로 /1230000/BidPublicInfoService/... 는 폐기됐다. /1230000/ad/ 가 필요하다)",
     "20": "서비스 접근이 거부됐다. 활용신청 상태를 확인할 것.",
     "22": "일일 트래픽 한도를 초과했다(개발계정 기본 1,000건/일).",
-    "30": f"등록되지 않은 서비스키다. ~/.env 의 {KEY_NAME} 값과 "
+    "30": f"등록되지 않은 서비스키다. 저장소 루트 .env 의 {KEY_NAME} 값과 "
     "활용신청 승인 여부를 확인할 것. 발급 직후 반영에 최대 1시간 걸릴 수 있다.",
     "31": "활용기간이 만료된 키다.",
     "32": "등록되지 않은 IP다.",
@@ -104,8 +104,36 @@ def _parse_env_file(path: pathlib.Path) -> dict[str, str]:
     return out
 
 
+def _env_file_candidates() -> list[pathlib.Path]:
+    """`.env` 탐색 경로를 우선순위 순으로 만든다.
+
+    현재 디렉터리에서 위로 올라가며 찾고, 마지막에 홈 디렉터리를 본다.
+    위로 올라가는 이유: 스크립트를 `skills/<name>/` 안에서 실행해도
+    **저장소 루트의 `.env`**를 찾아야 하기 때문이다.
+    `.git`이 있는 디렉터리까지만 올라간다 — 저장소 밖의 남의 `.env`를
+    주워 오지 않으려고.
+    """
+    out: list[pathlib.Path] = []
+    try:
+        cwd = pathlib.Path.cwd().resolve()
+    except OSError:
+        cwd = None
+    if cwd is not None:
+        for depth, directory in enumerate((cwd, *cwd.parents)):
+            out.append(directory / ".env")
+            if (directory / ".git").exists() or depth >= 5:
+                break
+    home = pathlib.Path.home() / ".env"
+    if home not in out:
+        out.append(home)
+    return out
+
+
 def load_service_key() -> str:
-    """환경변수 -> ~/.env -> ./.env 순으로 인증키를 찾는다.
+    """환경변수 -> 프로젝트 `.env`(상위로 탐색) -> `~/.env` 순으로 찾는다.
+
+    프로젝트 로컬이 홈보다 **우선**이다. 저장소마다 다른 키를 쓸 수 있어야 하고,
+    홈에 묵은 키가 남아 있어도 프로젝트 설정이 이기는 쪽이 덜 놀랍다.
 
     Returns:
       인증키 문자열.
@@ -119,18 +147,19 @@ def load_service_key() -> str:
         if value:
             return value.strip()
 
-    for candidate in (pathlib.Path.home() / ".env", pathlib.Path.cwd() / ".env"):
+    for candidate in _env_file_candidates():
         env = _parse_env_file(candidate)
         for name in names:
             if env.get(name):
                 return env[name].strip()
 
     raise G2BError(
-        f"인증키를 찾지 못했다. ~/.env 에 {KEY_NAME} 을 등록할 것.\n"
+        f"인증키를 찾지 못했다. 저장소 루트의 .env 에 {KEY_NAME} 을 등록할 것.\n"
         "  발급: https://www.data.go.kr/data/15129394/openapi.do 에서 활용신청(자동승인)\n"
         "  등록(터미널에서 직접 실행, 입력은 화면에 안 보인다):\n"
         f'    printf "Enter {KEY_NAME} (typing hidden): " && read -s val && echo '
-        f'&& echo "{KEY_NAME}=$val" >> ~/.env && echo "Saved."'
+        f'&& echo "{KEY_NAME}=$val" >> .env && echo "Saved."\n'
+        "  (저장소 루트에서 실행할 것. 하위 폴더에서 실행하면 거기에 .env 가 생긴다)"
     )
 
 

@@ -42,24 +42,29 @@ cp -r KR-Data-Skills/skills/* ~/.claude/skills/
 ## 빠른 시작
 
 ```bash
-cd skills/g2b-bid-notice
+# 저장소 루트에서 실행한다 (.env 를 여기 둔다)
 
 # 1) 인증키 없이 API 경로가 살아 있는지부터 확인 (진단용)
-uv run scripts/g2b_api.py probe-endpoints
+uv run skills/g2b-bid-notice/scripts/g2b_api.py probe-endpoints
 
 # 2) 공공데이터포털에서 인증키 발급 (자동승인, 즉시)
 #    https://www.data.go.kr/data/15129394/openapi.do → 활용신청 → 개발계정
-#    아래는 터미널에서 직접 실행할 것. 입력은 화면에 보이지 않는다.
-printf "Enter DATA_GO_KR_SERVICE_KEY (typing hidden): " && read -s val && echo && echo "DATA_GO_KR_SERVICE_KEY=$val" >> ~/.env && echo "Saved."
+#    아래를 그대로 붙여넣고 **엔터를 친 뒤에** 키를 입력한다.
+#    입력은 화면에 보이지 않는다. 키를 프롬프트 문구 안에 넣지 말 것.
+printf "Enter DATA_GO_KR_SERVICE_KEY (typing hidden): " && read -s val && echo && echo "DATA_GO_KR_SERVICE_KEY=$val" >> .env && echo "Saved."
 
 # 3) 키가 실제로 통하는지 확인 (키 값은 출력되지 않는다)
-uv run scripts/g2b_api.py check-key
+uv run skills/g2b-bid-notice/scripts/g2b_api.py check-key
 
 # 4) 최근 7일 용역 공고
-uv run scripts/g2b_api.py search --kind servc --days 7 \
+uv run skills/g2b-bid-notice/scripts/g2b_api.py search --kind servc --days 7 \
   --fields "bidNtceNo,bidNtceNm,ntceInsttNm,bidClseDt,presmptPrce" \
-  --output /tmp/g2b.json
+  --output out/g2b.json
 ```
+
+`.env.example`을 복사해 써도 된다 — `cp .env.example .env` 후 값만 채운다.
+래퍼는 현재 디렉터리에서 `.git`이 있는 곳까지 거슬러 올라가며 `.env`를 찾으므로,
+`cd skills/g2b-bid-notice` 후에 실행해도 루트의 `.env`를 읽는다.
 
 `uv`가 없으면 [`skills/uv`](skills/uv)를 먼저 본다.
 
@@ -80,10 +85,13 @@ API 응답을 에이전트 컨텍스트에 쏟지 않는다. 항상 파일로 �
 키 값을 컨텍스트·터미널·대화에 절대 출력하지 않는다. 존재만 확인한다.
 
 ```bash
-grep -sq "^DATA_GO_KR_SERVICE_KEY=" ~/.env
+grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.env
 ```
 
 에러 메시지에 키가 섞여 나가는 것까지 래퍼가 자동으로 마스킹한다.
+
+키는 **저장소 루트 `.env`**에 둔다(`.gitignore` 대상). 탐색 순서는
+환경변수 → 현재 디렉터리부터 저장소 루트까지의 `.env` → `~/.env`(폴백)다.
 
 **4. MCP 서버가 아니라 CLI 래퍼**
 의도적인 선택이다. 토큰 효율이 이유다. 도구 정의를 상시 로드하지 않고,

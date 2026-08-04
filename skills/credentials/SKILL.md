@@ -19,11 +19,15 @@ KR-Data-Skills의 스킬 대부분은 공공데이터포털(data.go.kr) 인증�
 **핵심: 값을 출력하거나 컨텍스트에 읽어들이지 않고 확인해야 한다.**
 
 ```bash
-grep -sq "^DATA_GO_KR_SERVICE_KEY=" ~/.env
+grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.env
 ```
 
-`-q`는 내용을 출력하지 않고, `-s`는 `~/.env`가 아예 없을 때도 조용히 실패한다.
+`-q`는 내용을 출력하지 않고, `-s`는 파일이 아예 없을 때도 조용히 실패한다.
 `CREDENTIAL_NAME` 자리에는 호출한 스킬이 요구하는 실제 변수명을 넣는다.
+
+**`.env`는 저장소 루트에 둔다.** 위 명령은 저장소 루트에서 실행하는 걸 전제한다.
+하위 폴더에서 확인해야 하면 루트 경로를 명시할 것 —
+`grep -sq "^…=" /path/to/repo/.env ~/.env`.
 
 - **종료코드 0** → 키가 있다. 진행한다.
 - **종료코드 0이 아님** → 키가 없다(또는 `.env`가 없다). **즉시 멈추고**
@@ -34,8 +38,8 @@ grep -sq "^DATA_GO_KR_SERVICE_KEY=" ~/.env
 > 그리고 "키가 없습니다"라고만 말하고 턴을 끝내지 말 것.
 > 반드시 §2의 명령을 만들어 사용자에게 제시해야 한다.
 
-**절대 쓰지 말 것:** `cat ~/.env`, `grep "KEY" ~/.env`(`-q` 없이),
-`echo $DATA_GO_KR_SERVICE_KEY`, `printenv`, `Get-Content ~/.env`.
+**절대 쓰지 말 것:** `cat .env`, `grep "KEY" .env`(`-q` 없이),
+`echo $DATA_GO_KR_SERVICE_KEY`, `printenv`, `Get-Content .env`.
 
 ## 2. 사용자에게 등록 요청하기
 
@@ -45,11 +49,20 @@ grep -sq "^DATA_GO_KR_SERVICE_KEY=" ~/.env
 `read -s`라 입력이 화면에 표시되지 않는다는 점을 반드시 함께 알려 준다.
 
 ```bash
-printf "Enter CREDENTIAL_NAME (typing hidden): " && read -s val && echo && echo "CREDENTIAL_NAME=$val" >> ~/.env && echo "Saved."
+printf "Enter CREDENTIAL_NAME (typing hidden): " && read -s val && echo && echo "CREDENTIAL_NAME=$val" >> .env && echo "Saved."
 ```
 
 제시하기 전에 `CREDENTIAL_NAME`을 실제 변수명으로 치환할 것.
-`~/.env`가 없으면 이 명령이 만들어 준다.
+`.env`가 없으면 이 명령이 만들어 준다. **저장소 루트에서 실행해야 한다** —
+하위 폴더에서 돌리면 거기에 `.env`가 생기고, 나중에 왜 안 읽히는지 헤매게 된다.
+
+> [!WARNING]
+> **키 값을 `printf`의 프롬프트 문자열 안에 넣지 말라고 명시할 것.**
+> 실제로 이 저장소에서 사용자가 `printf "Enter CREDENTIAL_NAME <키값> : "` 형태로
+> 라벨에 키를 붙여 실행한 적이 있다. 그러면 `read -s`를 쓴 의미가 없고
+> 키가 기록에 남는다. 게다가 `read`가 입력을 못 받으면 `&&` 체인이 끊겨
+> **저장도 안 된다** — 조용히 실패한다.
+> 안내할 때 "명령을 그대로 붙여넣고, **엔터 친 뒤에** 키를 입력하세요"라고 적을 것.
 
 **발급처 안내를 함께 준다.** 사용자가 키를 아직 갖고 있지 않을 수 있다.
 호출한 스킬이 알려 주는 발급 링크와 절차를 그대로 전달한다.
@@ -62,30 +75,71 @@ PowerShell만 쓴다면 아래를 안내한다.
 ```powershell
 $k = Read-Host "Enter CREDENTIAL_NAME" -AsSecureString
 $p = [Runtime.InteropServices.Marshal]::PtrToStringAuto([Runtime.InteropServices.Marshal]::SecureStringToBSTR($k))
-Add-Content -Path "$HOME\.env" -Value "CREDENTIAL_NAME=$p" -Encoding utf8
+Add-Content -Path ".env" -Value "CREDENTIAL_NAME=$p" -Encoding utf8
 "Saved."
 ```
 
+`Read-Host -AsSecureString`이라 입력이 화면에 안 보인다. 저장소 루트에서 실행할 것.
+
 ## 3. 스크립트 실행
 
-스킬의 헬퍼 스크립트는 `~/.env`에서 키를 **자동으로 읽는다.**
+스킬의 헬퍼 스크립트는 `.env`에서 키를 **자동으로 읽는다.**
 
 키를 직접 읽거나, 셸에 export하거나, CLI 인자로 넘길 **필요가 없다.**
 §1로 존재만 확인했으면 스크립트를 그냥 실행하면 된다.
 
-탐색 순서는 이렇다: 환경변수 → `~/.env` → `./.env`.
+### 탐색 순서
+
+1. **환경변수** — 셸에 떠 있으면 무조건 이게 이긴다
+2. **현재 디렉터리의 `.env`, 없으면 상위로 올라가며** — `.git`이 있는
+   디렉터리(=저장소 루트)까지만 올라간다. 그래서 `skills/<name>/` 안에서
+   실행해도 **저장소 루트의 `.env`**를 찾는다
+3. **`~/.env`** — 폴백. 스킬을 `~/.claude/skills/`에 설치해 여러 프로젝트에서
+   공용으로 쓸 때를 위한 자리다
+
+**프로젝트 로컬이 홈보다 우선이다.** 저장소마다 다른 키를 쓸 수 있어야 하고,
+홈에 묵은 키가 남아 있어도 프로젝트 설정이 이기는 쪽이 덜 놀랍다.
+
+> 같은 변수가 한 파일에 여러 줄 있으면 **마지막 줄이 이긴다**(dict 덮어쓰기).
+> 키를 교체할 때 `>>`로 덧붙이면 동작은 하지만, 묵은 줄은 지우는 게 맞다.
 
 ## 4. 이 저장소의 규약
 
 - **키 이름은 데이터 제공처 단위로 하나만 쓴다.** 공공데이터포털에서 발급한
   키 하나가 여러 API에 통하므로, 모든 data.go.kr 계열 스킬은
   **`DATA_GO_KR_SERVICE_KEY`** 를 공유한다. 스킬마다 다른 이름을 만들지 말 것.
-- `.env`는 절대 커밋하지 않는다. 루트 `.gitignore`에 이미 들어 있다.
+- **`.env`는 저장소 루트에 둔다.** 홈(`~/.env`)이 아니다.
+  프로젝트에서 쓰는 설정이 프로젝트 밖에 있으면 나중에 아무도 못 찾는다.
+  `.env.example`을 커밋해 두고 그걸 복사해 쓴다.
+- `.env`는 절대 커밋하지 않는다. 루트 `.gitignore`에 이미 들어 있다
+  (`.env` · `*.env` · `!.env.example`).
 - 키가 유효한지 확인해야 하면, 값을 출력하는 대신 각 스킬이 제공하는
   `check-key` 류의 진단 명령을 쓴다.
 
 ## 5. 유출했을 때
 
-키 값이 대화나 로그에 노출됐다면 되돌릴 수 없다. 사용자에게 즉시 알리고
-**재발급**을 안내한다: 공공데이터포털 → 마이페이지 → 오픈API → 해당 활용신청 →
-인증키 재발급.
+키 값이 대화나 로그에 노출됐다면 되돌릴 수 없다. 사용자에게 **즉시 알린다.**
+
+그다음이 중요하다 — **재발급을 반사적으로 권하지 말 것.** 먼저 두 가지를 재어 본다.
+
+**1. 노출 범위** — 공개(공개 저장소·이슈·블로그·스크린샷 공유)인가,
+비공개(로컬 대화 기록)인가. 공개면 즉시 재발급이 맞다.
+
+**2. 회전 비용** — 같은 키가 어디에 더 박혀 있는지 **값으로** 찾는다.
+변수명은 프로젝트마다 다를 수 있어서 이름으로 grep하면 놓친다.
+
+```bash
+# 값이 같은 .env 를 전수로 찾는다 (값은 출력하지 않는다)
+find ~ /path/to/projects -maxdepth 3 -name ".env*" -type f 2>/dev/null |
+  while read -r f; do grep -qs "<키값>" "$f" && echo "$f"; done
+```
+
+파일뿐 아니라 **GitHub Actions Secret · Vercel/Supabase 환경변수**도 센다.
+운영 시크릿이 끼어 있으면 회전이 곧 배포 작업이 된다.
+
+> 공공데이터포털은 **인증키가 계정당 하나**다. 재발급하면
+> "기존에 활용신청한 API에 대한 인증키도 **모두** 변경"된다(포털 경고문).
+> 활용 중인 API가 여러 개면 한 곳만 갱신하고 끝낼 수 없다.
+
+재발급 경로: 공공데이터포털 → 마이페이지 → **인증키 발급현황** →
+**일반 인증키 재발급하기**.
