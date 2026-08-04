@@ -1,0 +1,10 @@
+{
+  "name": "kr-data",
+  "version": "0.1.0",
+  "description": "한국 공공데이터 API를 AI 에이전트가 직접 조회할 수 있게 감싼 스킬 팩.",
+  "author": {
+    "name": "haemiru"
+  },
+  "repository": "https://github.com/haemiru/KR-Data-Skills",
+  "license": "Apache-2.0"
+}

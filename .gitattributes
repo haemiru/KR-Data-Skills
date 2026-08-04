@@ -1,0 +1,5 @@
+# 개발기는 Windows지만 배포 대상은 크로스플랫폼이다. 저장소에는 LF로 고정한다.
+* text=auto eol=lf
+*.py text eol=lf
+*.md text eol=lf
+*.json text eol=lf

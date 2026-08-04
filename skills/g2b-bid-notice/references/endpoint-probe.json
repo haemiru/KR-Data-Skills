@@ -1,0 +1,103 @@
+{
+  "_meta": {
+    "check": "probe-endpoints",
+    "base_url": "https://apis.data.go.kr/1230000/ad/BidPublicInfoService",
+    "note": "code 30 = 경로 유효(키만 틀림), code 12 = 경로 없음",
+    "requested_at": "2026-08-04T23:29:35",
+    "api_calls": 18,
+    "total_count": 18,
+    "returned": 18
+  },
+  "items": [
+    {
+      "operation": "getBidPblancListInfoThng",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoServc",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoCnstwk",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoFrgcpt",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoEtc",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoThngPPSSrch",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoServcPPSSrch",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoCnstwkPPSSrch",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoFrgcptPPSSrch",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoEtcPPSSrch",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoThngBsisAmount",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoServcBsisAmount",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoCnstwkBsisAmount",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoChgHstryThng",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoChgHstryServc",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoChgHstryCnstwk",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoLicenseLimit",
+      "return_reason_code": "30",
+      "alive": true
+    },
+    {
+      "operation": "getBidPblancListInfoPrtcptPsblRgn",
+      "return_reason_code": "30",
+      "alive": true
+    }
+  ]
+}
