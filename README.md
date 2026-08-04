@@ -22,9 +22,14 @@
 
 | 스킬 | 내용 | 상태 |
 |---|---|---|
-| [`g2b-bid-notice`](skills/g2b-bid-notice) | 조달청 나라장터 입찰공고 — 목록·조건검색·기초금액·면허제한·참가가능지역·변경이력 (오퍼레이션 18개) | 래퍼 동작 확인. 실데이터 검증은 인증키 발급 후 |
+| [`g2b-bid-notice`](skills/g2b-bid-notice) | 조달청 나라장터 입찰공고 — 목록·조건검색·기초금액·면허제한·참가가능지역·변경이력 (오퍼레이션 18개) | ✅ **실데이터 검증 완료** |
 | [`credentials`](skills/credentials) | 인증키 안전 취급 프로토콜 | ✅ |
 | [`uv`](skills/uv) | Python 실행 환경 보장 | ✅ |
+
+`g2b-bid-notice`는 실제 인증키로 6개 오퍼레이션 계열 × 5개 업무구분을 호출해
+응답 필드를 확정했다. 무엇을 확인했고 무엇이 아직 미확인인지는
+[`references/fields.md`](skills/g2b-bid-notice/references/fields.md)에
+구분해 적어 뒀다.
 
 ## 설치 (Claude Code)
 
@@ -135,8 +140,10 @@ grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.env
 
 - [x] 저장소 골격 + 공통 스킬(`credentials`, `uv`)
 - [x] 나라장터 입찰공고 스킬 — 래퍼·문서·엔드포인트 실측
-- [ ] 인증키로 실데이터 검증 → `references/fields.md`의 필드명 확정
-- [ ] 국가법령정보 / KIPRIS 특허 / 식약처 등 확장
+- [x] 실데이터 검증 → 응답 필드·`inqryDiv`·페이지네이션 확정
+- [x] 검증에서 드러난 구멍 보강 — `--join` · `--dedup` · `--preset`
+- [ ] 국토교통부 실거래가 (아파트·오피스텔·단독·토지 등)
+- [ ] KIPRIS 특허 / 식약처 / 국가법령정보 등 확장
 
 ## 라이선스
 
