@@ -1,16 +1,24 @@
 # CLAUDE.md — KR-Data-Skills
 
 한국 공공데이터 API를 AI 에이전트용 스킬로 감싼 오픈소스 팩.
-현재 상태와 다음 할 일은 **`docs/NEXT.md`가 단일 기준점**이다. 먼저 읽을 것.
+
+| 문서 | 언제 읽나 |
+|---|---|
+| **`docs/NEXT.md`** | **먼저 읽는다.** 현재 상태와 다음 할 일의 단일 기준점 |
+| `docs/WORKLOG.md` | 왜 이렇게 됐는지 궁금할 때. 결정 근거·막다른 길·실수 기록 |
+| `README.md` | 외부 공개용. 설계 원칙과 설치법 |
 
 ## 🔴 git
 
-이 폴더는 **자체 `.git`을 가진 독립 저장소**다. 부모 `D:\Claude-prj`는 로컬 전용
-모노레포이고 원격이 없다.
+이 폴더는 **자체 `.git`을 가진 독립 저장소**다. 원격은
+`https://github.com/haemiru/KR-Data-Skills` (**공개**).
+부모 `D:\Claude-prj`는 로컬 전용 모노레포이고 원격이 없다.
 
 - git 작업은 **이 폴더 안에서만** 한다. 부모에서 `git add .` 금지
 - 커밋 전에 `git rev-parse --show-toplevel`이 `D:/Claude-prj/KR-Data-Skills`인지 확인
-- `.env`는 절대 커밋하지 않는다 (`.gitignore`에 있음)
+- **부모 `D:\Claude-prj\CLAUDE.md`는 건드리지 않는다** (사용자 지시)
+- `.env`는 절대 커밋하지 않는다 (`.gitignore`에 있음).
+  **공개 저장소이므로 푸시 전 `git ls-files`로 한 번 더 확인할 것**
 
 ## 범위
 
