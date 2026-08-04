@@ -135,6 +135,78 @@ uv run scripts/g2b_api.py search-nara \
 > `presmptPrce + VAT = asignBdgtAmt`(배정예산)가 표본 전건에서 성립했다.
 > 사용자가 "예산 1억"이라고 하면 어느 쪽인지 확인할 것.
 
+### 2-1. 결과 가공 — `--dedup` · `--join` · `--preset`
+
+**`search`와 `search-nara`에만 붙는다.** 보조 오퍼레이션은 1:N이 정상이라
+중복 제거를 걸면 데이터가 망가진다.
+
+#### 🔴 `--dedup latest` — 목록을 보고하기 전엔 거의 항상 켠다
+
+같은 공고번호가 **차수(`bidNtceOrd`)만 다르게 여러 행**으로 온다.
+실측에서 300건 중 8건이 `000`/`001` 쌍이었다(공고명 동일, 공고일시만 몇 시간 차이).
+
+```bash
+uv run scripts/g2b_api.py search --kind servc --days 7 \
+  --limit 100 --max-pages 3 --dedup latest --preset core \
+  --output out/g2b.json
+#   중복 제거: 300행 -> 292공고 (차수 중복 8건 제거)
+```
+
+- 행 단위 유일 키 = `(bidNtceNo, bidNtceOrd)`
+- `--dedup latest`는 `bidNtceNo`로 묶어 **차수 최댓값 1건만** 남긴다
+- 키를 못 뽑는 행은 버리지 않고 통과시킨다. 조용히 사라지는 것보다 중복이 낫다
+- `_meta.dedup_removed`에 몇 건 지웠는지 남는다
+
+#### `--join region,license,basis` — 근거를 붙인다
+
+**`--region`으로 걸러도 응답에는 지역 필드가 없다.** 결과가 정말 그 지역인지
+증명하려면 `region-limit`을 조인해야 한다. 그걸 래퍼가 대신 한다.
+
+```bash
+uv run scripts/g2b_api.py search-nara --kind servc --days 7 \
+  --region "충청북도" --price-from 50000000 \
+  --dedup latest --join region --preset core \
+  --limit 999 --output out/chungbuk.json
+#   조인 region: 6149행 수집(7페이지) -> 28건 매칭 (100%)
+```
+
+| 값 | 붙는 키 | 내용 |
+|---|---|---|
+| `region` | `_region[]` | 참가가능지역 (`prtcptPsblRgnNm`) |
+| `license` | `_license[]` | 면허제한 (`lcnsLmtNm`) |
+| `basis` | `_basis[]` | 기초금액 (`bssamt`). **`--kind thng/servc/cnstwk`만** |
+
+- 전부 **1:N이라 항상 배열**이다. 붙을 게 없으면 빈 배열 — 키 자체는 남는다.
+  그래야 "조인 안 함"과 "조인했는데 없음"이 구분된다
+- `--fields`/`--preset`으로 걸러도 `_` 로 시작하는 조인 결과는 살아남는다
+- 조인은 `inqryDiv=1` 고정이다. 보조 행은 자기 `rgstDt`로 색인되기 때문
+
+> ### ⚠ 호출 예산을 크게 먹는다
+> 보조 오퍼레이션은 **공고번호로 좁히는 파라미터가 없다**(실측). 그래서 같은
+> 기간을 통째로 훑는다. 7일 창 기준 참가가능지역이 **6,000행대 = 7페이지**다.
+> 개발계정은 일 1,000건이다. **기간을 먼저 좁히고 조인할 것.**
+>
+> `--join-max-pages`(기본 12) 상한에 걸리면 **조인이 불완전**하다.
+> 그때는 `🔴 조인이 불완전하다` 경고가 뜨고 `_meta.join_incomplete`에 남는다.
+> **이 경고가 보이면 결과를 사용자에게 사실로 보고하지 말 것.**
+
+**매칭률(`_meta.join_stats[*].match_rate`)이 낮은 건 오류가 아니다.**
+지역제한·면허제한·기초금액이 모든 공고에 있는 게 아니다. 실측 예: 지역 22% ·
+면허 62% · 기초금액 15%. 반면 `--region`으로 거른 결과에 `region`을 조인하면
+100%가 나온다(제한이 있으니 걸린 것이므로). **문제 신호는 매칭률이 아니라
+`join_incomplete`다.**
+
+#### `--preset core` — 업무구분에 맞는 기본 필드
+
+필드 집합이 업무구분마다 다르다(용역 113 · 공사 143 · 물품 101 · 외자 97 ·
+**기타 38**). 없는 필드를 `--fields`에 넣으면 **조용히 빠진다.**
+
+`--preset core`는 5개 업무구분 **전부에 존재함을 실측한 12개 공통 필드** +
+업무구분별 추가 필드를 쓴다. 공사면 `cnstrtsiteRgnNm`(공사현장 지역)·
+`mainCnsttyNm`(주공종), 물품이면 `dlvrTmlmtDt`(납품기한)·`prdctQty`(수량) 식이다.
+
+`--fields`를 직접 주면 그쪽이 이긴다. 자세한 차이는 `references/fields.md` §11.
+
 ### 3. 기초금액 — `basis-amount`
 
 낙찰가 예측·투찰 판단의 재료. **`--kind`는 `thng`/`servc`/`cnstwk`만 된다.**
@@ -201,54 +273,44 @@ API라, `code 12`(경로 없음)와 `code 30`(경로는 살아있고 키만 틀�
 ```json
 {
   "_meta": {
-    "operation": "getBidPblancListInfoServc",
-    "inqry_bgn_dt": "202607290000",
-    "inqry_end_dt": "202608042359",
+    "operation": "getBidPblancListInfoServcPPSSrch",
+    "inqry_bgn_dt": "202607300000",
+    "inqry_end_dt": "202608052359",
     "date_chunks": 1,
-    "api_calls": 3,
-    "pages_fetched": 3,
-    "total_count": 412,
-    "returned": 300,
-    "truncated": false
+    "api_calls": 8,
+    "pages_fetched": 1,
+    "total_count": 31,
+    "fetched": 31,
+    "returned": 28,
+    "truncated": false,
+    "dedup": "latest",
+    "dedup_removed": 3,
+    "join": ["region"],
+    "join_stats": {
+      "region": {
+        "operation": "getBidPblancListInfoPrtcptPsblRgn",
+        "rows_fetched": 6149, "pages": 7,
+        "keyed_notices": 3198, "rows_without_key": 0,
+        "truncated": false,
+        "matched_items": 28, "match_rate": 1.0
+      }
+    },
+    "join_incomplete": []
   },
-  "items": [ { "bidNtceNo": "...", "bidNtceNm": "..." } ]
+  "items": [
+    { "bidNtceNo": "...", "bidNtceNm": "...",
+      "_region": [ { "prtcptPsblRgnNm": "충청북도" } ] }
+  ]
 }
 ```
 
-- `total_count` — API가 알려 준 전체 건수. `returned`보다 크면 아직 안 가져온 게 있다.
-- `truncated: true` — `--max-items`(기본 2000)에 걸려 잘렸다는 뜻.
-- 파일에서 읽을 때는 `items[*]`의 필요한 필드만 볼 것. 전체를 통째로 읽지 말 것.
-
-### 🔴 보고 전에 반드시 중복 제거
-
-**같은 공고번호가 차수(`bidNtceOrd`)만 다르게 여러 행으로 온다.**
-실측에서 300건 중 8건이 `000`/`001` 쌍이었다(공고명 동일, 공고일시만 몇 시간 차이).
-
-- 행 단위 유일 키 = **`(bidNtceNo, bidNtceOrd)`**
-- **사용자에게 공고 목록을 보고할 때는 `bidNtceNo`로 묶어 `bidNtceOrd`
-  최댓값(=최신 차수)만 남긴다.** 안 그러면 같은 공고를 두 번 보고하게 된다
-
-```bash
-uv run python -c "
-import json,sys; sys.stdout.reconfigure(encoding='utf-8')
-d=json.load(open(r'/tmp/g2b.json',encoding='utf-8'))
-latest={}
-for i in d['items']:
-    k=i['bidNtceNo']
-    if k not in latest or i['bidNtceOrd']>latest[k]['bidNtceOrd']: latest[k]=i
-print(len(d['items']),'행 ->',len(latest),'공고')
-"
-```
+- `total_count` — API가 알려 준 전체 건수. `fetched`보다 크면 아직 안 가져온 게 있다
+- `fetched` → `returned` — 중복 제거 전/후 건수
+- `truncated: true` — `--max-items`(기본 2000)에 걸려 잘렸다는 뜻
+- **`join_incomplete`가 비어 있지 않으면 조인 결과를 사실로 보고하지 말 것**
+- 파일에서 읽을 때는 `items[*]`의 필요한 필드만 볼 것. 전체를 통째로 읽지 말 것
 
 정렬은 `bidNtceDt` 내림차순이 **아니다**(실측). 순서를 믿고 앞부분만 읽지 말 것.
-
-### 업무구분을 바꾸면 `--fields`도 바꾼다
-
-필드 집합이 업무구분마다 다르다 — 용역 113 · 공사 143 · 물품 101 ·
-외자 97 · 기타 38개. 없는 필드를 `--fields`에 넣으면 **조용히 빠진다.**
-특히 `etc`(기타)는 `dminsttCd` · `ntceInsttOfclTelNo` · `sucsfbidMthdNm`조차
-없고, 외자(`frgcpt`)에는 `VAT` · `asignBdgtAmt`가 없다.
-자세한 차이는 `references/fields.md` §11.
 
 `jq`가 없는 환경이면(이 저장소의 기본 개발기가 그렇다) 파이썬으로 읽는다:
 
@@ -265,8 +327,11 @@ uv run python -c "import json;d=json.load(open(r'/tmp/g2b.json',encoding='utf-8'
 | `code 30`인데 키는 맞음 | 발급 직후 미반영 | 최대 1시간 기다렸다 재시도 |
 | `code 22` | 일 1,000건 한도 초과 | 다음 날까지 대기, 또는 운영계정 신청 |
 | 결과 0건인데 에러는 아님 | `--inqry-div 2`를 썼다 | **`2`는 날짜 범위로 항상 0건이다**(실측). 일반 조회는 `1`(기본값), 변경공고만 보려면 `3` |
-| 같은 공고가 두 번 보임 | `bidNtceOrd`가 다른 행 | `bidNtceNo`로 묶어 최신 차수만 남길 것 (위 "중복 제거") |
-| 제한지역·업종을 결과에서 못 찾음 | 요청 전용 파라미터라 응답 필드에 없음 | `region-limit` / `license-limit`을 따로 호출해 조인 |
+| 같은 공고가 두 번 보임 | `bidNtceOrd`가 다른 행 | **`--dedup latest`** |
+| 제한지역·업종을 결과에서 못 찾음 | 요청 전용 파라미터라 응답 필드에 없음 | **`--join region,license`** |
+| 조인 매칭률이 낮다 | 그 공고에 해당 제한이 없는 것 | 정상이다. `join_incomplete`가 아니면 문제없음 |
+| `🔴 조인이 불완전하다` | 보조 조회가 `--join-max-pages`에 걸림 | 기간을 좁히거나 상한을 올린다. **그 전엔 결과를 단정하지 말 것** |
+| `--fields`를 줬는데 필드가 없다 | 업무구분에 그 필드가 없음 | `--preset core` 또는 `fields.md` §11 확인 |
 | 긴 기간 조회 실패 | API가 장기간 조회를 거부 | 래퍼가 기본 30일 단위로 자동 분할한다(`--chunk-days`) |
 | 한글이 깨짐 | Windows cp949 | 래퍼가 stdout을 utf-8로 고정한다. 직접 스크립트를 짤 땐 `encoding="utf-8"` 명시 |
 

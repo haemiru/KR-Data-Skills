@@ -56,11 +56,20 @@ printf "Enter DATA_GO_KR_SERVICE_KEY (typing hidden): " && read -s val && echo &
 # 3) 키가 실제로 통하는지 확인 (키 값은 출력되지 않는다)
 uv run skills/g2b-bid-notice/scripts/g2b_api.py check-key
 
-# 4) 최근 7일 용역 공고
+# 4) 최근 7일 용역 공고 (차수 중복 제거 + 업무구분별 기본 필드)
 uv run skills/g2b-bid-notice/scripts/g2b_api.py search --kind servc --days 7 \
-  --fields "bidNtceNo,bidNtceNm,ntceInsttNm,bidClseDt,presmptPrce" \
-  --output out/g2b.json
+  --dedup latest --preset core --output out/g2b.json
+
+# 5) "충북 지역제한 용역 중 추정가격 5천만원 이상" — 지역 근거까지 붙여서
+uv run skills/g2b-bid-notice/scripts/g2b_api.py search-nara --kind servc --days 7 \
+  --region "충청북도" --price-from 50000000 \
+  --dedup latest --join region --preset core \
+  --limit 999 --output out/chungbuk.json
 ```
+
+5번이 이 저장소가 노리는 지점이다. 나라장터 API는 지역으로 **필터링은 되지만
+응답에 지역 필드가 없어서**, 결과가 정말 그 지역인지 응답만으로는 증명할 수 없다.
+`--join region`이 참가가능지역 오퍼레이션을 붙여 근거를 만든다.
 
 `.env.example`을 복사해 써도 된다 — `cp .env.example .env` 후 값만 채운다.
 래퍼는 현재 디렉터리에서 `.git`이 있는 곳까지 거슬러 올라가며 `.env`를 찾으므로,

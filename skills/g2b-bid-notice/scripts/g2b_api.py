@@ -355,11 +355,20 @@ def total_count(payload: dict) -> int:
 
 
 def project(items: list[dict], fields: str | None) -> list[dict]:
-    """--fields 로 지정한 키만 남긴다. 파일 크기를 줄이는 용도."""
+    """--fields 로 지정한 키만 남긴다. 파일 크기를 줄이는 용도.
+
+    `_` 로 시작하는 키(조인 결과)는 항상 살린다. 안 그러면 `--join` 과
+    `--fields` 를 같이 썼을 때 조인 결과가 조용히 사라진다.
+    """
     if not fields:
         return items
     keep = [f.strip() for f in fields.split(",") if f.strip()]
-    return [{k: item.get(k) for k in keep if k in item} for item in items]
+    out = []
+    for item in items:
+        row = {k: item.get(k) for k in keep if k in item}
+        row.update({k: v for k, v in item.items() if k.startswith("_")})
+        out.append(row)
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -437,6 +446,255 @@ def write_output(path: str, meta: dict, items: list[dict], raw: list[dict] | Non
             f"⚠ --max-items {meta.get('max_items')} 에 걸려 잘렸다. "
             "전체가 필요하면 값을 올리거나 조회기간을 좁힐 것."
         )
+    if meta.get("dedup") == "latest":
+        removed = meta.get("dedup_removed", 0)
+        print(
+            f"   중복 제거: {meta.get('fetched')}행 -> {len(items)}공고 "
+            f"(차수 중복 {removed}건 제거)"
+        )
+    for name, st in (meta.get("join_stats") or {}).items():
+        rate = st.get("match_rate")
+        rate_txt = f"{rate:.0%}" if isinstance(rate, float) else "-"
+        print(
+            f"   조인 {name}: {st['rows_fetched']}행 수집({st['pages']}페이지) "
+            f"-> {st['matched_items']}건 매칭 ({rate_txt})"
+        )
+    if meta.get("join_incomplete"):
+        print(
+            f"🔴 조인이 불완전하다 — {', '.join(meta['join_incomplete'])} 가 "
+            f"--join-max-pages 상한에 걸렸다. 붙지 않은 공고가 있을 수 있다.\n"
+            "   조회기간을 좁히거나 --join-max-pages 를 올릴 것."
+        )
+
+
+# ---------------------------------------------------------------------------
+# 결과 가공 — 중복 제거 / 조인 / 필드 프리셋
+# ---------------------------------------------------------------------------
+# 공고 1건을 가리키는 유일 키. 2026-08-05 실측:
+# 300건 중 8건이 같은 bidNtceNo 에 차수(000/001)만 다른 행이었다.
+# bidNtceNo 만으로 묶으면 같은 공고를 두 번 보고하게 된다.
+ROW_KEY = ("bidNtceNo", "bidNtceOrd")
+
+
+def _row_key(row: dict) -> tuple[str, str] | None:
+    """(공고번호, 차수) 키를 뽑는다. 둘 중 하나라도 없으면 None."""
+    no = str(row.get("bidNtceNo") or "").strip()
+    ord_ = str(row.get("bidNtceOrd") or "").strip()
+    if not no or not ord_:
+        return None
+    return no, ord_
+
+
+def dedup_latest(items: list[dict]) -> tuple[list[dict], int]:
+    """공고번호별로 차수(bidNtceOrd) 최댓값 1건만 남긴다.
+
+    키를 못 뽑는 행은 **버리지 않고 그대로 통과**시킨다.
+    조용히 사라지는 것보다 중복이 낫다.
+
+    Returns:
+      (남은 items, 제거된 건수)
+    """
+    latest: dict[str, dict] = {}
+    passthrough: list[dict] = []
+    order: list[str] = []
+    for row in items:
+        key = _row_key(row)
+        if key is None:
+            passthrough.append(row)
+            continue
+        no, ord_ = key
+        if no not in latest:
+            latest[no] = row
+            order.append(no)
+        elif ord_ > str(latest[no].get("bidNtceOrd") or ""):
+            latest[no] = row
+    kept = [latest[no] for no in order] + passthrough
+    return kept, len(items) - len(kept)
+
+
+# 조인 대상 보조 오퍼레이션. 전부 (bidNtceNo, bidNtceOrd) 로 공고에 붙는다.
+# 전부 1:N 이다 — 공고 1건에 행이 여러 개 붙을 수 있어 항상 배열로 담는다.
+JOIN_SPECS = {
+    "region": {
+        "operation": "getBidPblancListInfoPrtcptPsblRgn",
+        "kinds": None,
+        "attr": "_region",
+        "desc": "참가가능지역 (prtcptPsblRgnNm)",
+    },
+    "license": {
+        "operation": "getBidPblancListInfoLicenseLimit",
+        "kinds": None,
+        "attr": "_license",
+        "desc": "면허제한 (lcnsLmtNm)",
+    },
+    "basis": {
+        "operation": None,  # 업무구분 의존 — _operation_for 로 만든다
+        "kinds": BASIS_AMOUNT_KINDS,
+        "attr": "_basis",
+        "desc": "기초금액 (bssamt)",
+    },
+}
+
+# 조인용 보조 조회의 기본 페이지 상한. 7일 창 기준 참가가능지역이 6,000행대라
+# 999행/페이지로 7페이지쯤 든다. 넉넉히 잡되 무한정 돌지 않게 막는다.
+DEFAULT_JOIN_MAX_PAGES = 12
+
+
+def _fetch_join_rows(
+    client: Client, operation: str, args, max_pages: int
+) -> tuple[list[dict], int, bool]:
+    """조인용 보조 오퍼레이션을 같은 기간으로 전량 훑는다.
+
+    보조 오퍼레이션은 공고번호로 좁히는 파라미터가 없다(실측). 그래서
+    같은 기간을 통째로 받아 메모리에서 인덱싱하는 수밖에 없다. 비싸다.
+
+    조인은 `inqryDiv=1`(등록일시 기준)로 고정한다. 보조 행은 자기 rgstDt 로
+    색인되므로 본 조회의 inqryDiv 를 따라가면 매칭이 어긋난다.
+
+    Returns:
+      (행 목록, 사용한 페이지 수, 상한에 걸렸는지)
+    """
+    start, end = resolve_range(args)
+    rows: list[dict] = []
+    pages = 0
+    truncated = False
+    for chunk_start, chunk_end in split_range(start, end, args.chunk_days):
+        page = 1
+        while page <= max_pages:
+            payload = client.get(
+                operation,
+                {
+                    "inqryDiv": "1",
+                    "inqryBgnDt": chunk_start,
+                    "inqryEndDt": chunk_end,
+                    "pageNo": page,
+                    "numOfRows": MAX_ROWS_PER_PAGE,
+                    "type": "json",
+                },
+            )
+            pages += 1
+            page_rows = extract_items(payload)
+            rows.extend(page_rows)
+            if len(page_rows) < MAX_ROWS_PER_PAGE:
+                break
+            page += 1
+        else:
+            # while 조건으로 빠져나옴 = 아직 더 남아 있다
+            truncated = True
+    return rows, pages, truncated
+
+
+def apply_joins(client: Client, items: list[dict], args) -> dict:
+    """보조 오퍼레이션을 붙이고 조인 통계를 돌려준다.
+
+    각 item 에 `_region` / `_license` / `_basis` 를 **배열로** 붙인다.
+    붙을 게 없으면 빈 배열이다 — 키 자체를 빼지 않는다. 그래야
+    "조인을 안 한 것"과 "조인했는데 없는 것"이 구분된다.
+    """
+    names = [n.strip() for n in (args.join or "").split(",") if n.strip()]
+    if not names:
+        return {}
+
+    unknown = [n for n in names if n not in JOIN_SPECS]
+    if unknown:
+        raise G2BError(
+            f"모르는 --join 대상: {', '.join(unknown)}. "
+            f"가능한 값: {', '.join(JOIN_SPECS)}"
+        )
+
+    index: dict[str, dict[tuple[str, str], list[dict]]] = {}
+    stats: dict[str, object] = {}
+    incomplete: list[str] = []
+
+    for name in names:
+        spec = JOIN_SPECS[name]
+        kind = getattr(args, "kind", None)
+        if spec["kinds"] and kind not in spec["kinds"]:
+            raise G2BError(
+                f"--join {name} 은 --kind {'/'.join(spec['kinds'])} 만 지원한다"
+                f"(요청: {kind}). 해당 오퍼레이션이 API에 없다."
+            )
+        operation = spec["operation"] or (
+            _operation_for("getBidPblancListInfo", kind, spec["kinds"]) + "BsisAmount"
+        )
+        rows, pages, truncated = _fetch_join_rows(
+            client, operation, args, args.join_max_pages
+        )
+        bucket: dict[tuple[str, str], list[dict]] = {}
+        keyless = 0
+        for row in rows:
+            key = _row_key(row)
+            if key is None:
+                keyless += 1
+                continue
+            bucket.setdefault(key, []).append(row)
+        index[name] = bucket
+        stats[name] = {
+            "operation": operation,
+            "rows_fetched": len(rows),
+            "pages": pages,
+            "keyed_notices": len(bucket),
+            "rows_without_key": keyless,
+            "truncated": truncated,
+        }
+        if truncated:
+            incomplete.append(name)
+
+    matched = {name: 0 for name in names}
+    for item in items:
+        key = _row_key(item)
+        for name in names:
+            attr = JOIN_SPECS[name]["attr"]
+            hits = index[name].get(key, []) if key else []
+            item[attr] = hits
+            if hits:
+                matched[name] += 1
+
+    for name in names:
+        stats[name]["matched_items"] = matched[name]
+        stats[name]["match_rate"] = (
+            round(matched[name] / len(items), 3) if items else None
+        )
+
+    return {
+        "join": names,
+        "join_stats": stats,
+        "join_incomplete": incomplete,
+    }
+
+
+# --fields 프리셋. 2026-08-05 실측으로 5개 업무구분 전부에 존재함을 확인한 것만 넣었다.
+PRESET_CORE = (
+    "bidNtceNo", "bidNtceOrd", "bidNtceNm", "ntceKindNm",
+    "ntceInsttNm", "dminsttNm",
+    "bidNtceDt", "bidClseDt", "opengDt",
+    "presmptPrce", "cntrctCnclsMthdNm", "bidNtceDtlUrl",
+)
+
+# 업무구분별 추가 필드. 필드 집합이 업무구분마다 달라서
+# (용역 113 / 공사 143 / 물품 101 / 외자 97 / 기타 38) 하나로 못 묶는다.
+PRESET_EXTRA = {
+    "servc": ("asignBdgtAmt", "srvceDivNm", "sucsfbidMthdNm",
+              "indstrytyLmtYn", "rgnLmtBidLocplcJdgmBssNm"),
+    "cnstwk": ("bdgtAmt", "cnstrtsiteRgnNm", "mainCnsttyNm",
+               "rgnDutyJntcontrctYn", "sucsfbidMthdNm", "indstrytyLmtYn"),
+    "thng": ("asignBdgtAmt", "dlvrTmlmtDt", "prdctQty", "prdctUnit",
+             "dtilPrdctClsfcNoNm", "sucsfbidMthdNm"),
+    "frgcpt": ("dlvrTmlmtDt", "prdctQty", "prdctUnit",
+               "dtilPrdctClsfcNoNm", "sucsfbidMthdNm"),
+    "etc": ("bidQlfctRgstCntnts", "rmrkCntnts", "cmmnSpldmdYn"),
+}
+
+
+def resolve_fields(args) -> str | None:
+    """--fields 를 확정한다. 명시한 --fields 가 --preset 을 이긴다."""
+    if getattr(args, "fields", None):
+        return args.fields
+    preset = getattr(args, "preset", "none")
+    if preset != "core":
+        return None
+    kind = getattr(args, "kind", None)
+    return ",".join(PRESET_CORE + PRESET_EXTRA.get(kind, ()))
 
 
 # ---------------------------------------------------------------------------
@@ -492,6 +750,18 @@ def collect(
         if truncated:
             break
 
+    fetched = len(items)
+
+    # 순서가 중요하다: 중복 제거 -> 조인 -> 투영.
+    # dedup 은 bidNtceOrd 가, join 은 bidNtceNo 가 필요한데 투영이 그걸 지울 수 있다.
+    dedup_removed = 0
+    if getattr(args, "dedup", "none") == "latest":
+        items, dedup_removed = dedup_latest(items)
+
+    join_meta: dict = {}
+    if getattr(args, "join", None):
+        join_meta = apply_joins(client, items, args)
+
     meta = {
         "operation": operation,
         "endpoint": f"{BASE_URL}/{operation}",
@@ -503,11 +773,16 @@ def collect(
         "api_calls": client.call_count,
         "pages_fetched": pages_fetched,
         "total_count": grand_total,
+        "fetched": fetched,
         "returned": len(items),
         "truncated": truncated,
         "max_items": args.max_items,
     }
-    return project(items, args.fields), meta, (raw_pages if args.keep_raw else None)
+    if getattr(args, "dedup", "none") == "latest":
+        meta["dedup"] = "latest"
+        meta["dedup_removed"] = dedup_removed
+    meta.update(join_meta)
+    return project(items, resolve_fields(args)), meta, (raw_pages if args.keep_raw else None)
 
 
 # ---------------------------------------------------------------------------
@@ -730,6 +1005,36 @@ def add_common(parser: argparse.ArgumentParser, *, needs_range: bool = True) -> 
                             help=f"조회기간 분할 단위(일, 기본 {DEFAULT_CHUNK_DAYS}). 0이면 분할 안 함.")
 
 
+def add_result_shaping(parser: argparse.ArgumentParser) -> None:
+    """공고 목록 계열에만 붙는 가공 옵션 (중복 제거 · 조인 · 필드 프리셋).
+
+    보조 오퍼레이션(면허·지역·기초금액·변경이력)에는 붙이지 않는다.
+    그쪽은 1:N 이 정상이라 중복 제거가 오히려 데이터를 망친다.
+    """
+    parser.add_argument(
+        "--dedup", choices=("none", "latest"), default="none",
+        help="latest: 같은 bidNtceNo 중 차수(bidNtceOrd) 최신 1건만 남긴다. "
+             "사용자에게 목록을 보고하기 전에 권장.",
+    )
+    parser.add_argument(
+        "--join",
+        help="보조 정보를 (bidNtceNo,bidNtceOrd)로 붙인다. 쉼표 구분: "
+             + ", ".join(f"{k}={v['desc']}" for k, v in JOIN_SPECS.items())
+             + ". 결과는 _region/_license/_basis 배열. "
+               "⚠ 보조 조회는 기간 전체를 훑어서 API 호출이 크게 는다.",
+    )
+    parser.add_argument(
+        "--join-max-pages", type=int, default=DEFAULT_JOIN_MAX_PAGES,
+        help=f"조인 보조 조회의 페이지 상한 (기본 {DEFAULT_JOIN_MAX_PAGES}). "
+             "상한에 걸리면 조인이 불완전하다고 경고한다.",
+    )
+    parser.add_argument(
+        "--preset", choices=("none", "core"), default="none",
+        help="core: 업무구분에 맞는 기본 필드 묶음을 쓴다(실측 확인된 필드만). "
+             "--fields 를 직접 주면 그쪽이 이긴다.",
+    )
+
+
 def add_kind(parser: argparse.ArgumentParser, default: str = "servc") -> None:
     parser.add_argument(
         "--kind", choices=sorted(KINDS), default=default,
@@ -747,6 +1052,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser("search", help="업무구분별 입찰공고 목록")
     add_kind(p)
+    add_result_shaping(p)
     add_common(p)
     p.set_defaults(func=cmd_search, needs_key=True)
 
@@ -761,6 +1067,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--price-from", help="추정가격 하한 (presmptPrceBgn)")
     p.add_argument("--price-to", help="추정가격 상한 (presmptPrceEnd)")
     p.add_argument("--ref-no", help="참조번호 (refNo)")
+    add_result_shaping(p)
     add_common(p)
     p.set_defaults(func=cmd_search_nara, needs_key=True)
 
