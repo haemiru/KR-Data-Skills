@@ -24,13 +24,18 @@
 |---|---|---|
 | [`g2b-bid-notice`](skills/g2b-bid-notice) | 조달청 나라장터 입찰공고 — 목록·조건검색·기초금액·면허제한·참가가능지역·변경이력 (오퍼레이션 18개) | ✅ **실데이터 검증 완료** |
 | [`molit-real-trade`](skills/molit-real-trade) | 국토교통부 실거래가 — 아파트·오피스텔·연립·단독 매매/전월세, 토지·상업업무용·공장창고 (오퍼레이션 13개) | ✅ **실데이터 검증 완료** |
+| [`mfds-drug-info`](skills/mfds-drug-info) | 식약처 의약품개요정보(e약은요) — 효능·사용법·주의사항·상호작용·부작용·보관법을 제품명·업체명·증상으로 조회 | ✅ **실데이터 검증 완료** |
 | [`credentials`](skills/credentials) | 인증키 안전 취급 프로토콜 | ✅ |
 | [`uv`](skills/uv) | Python 실행 환경 보장 | ✅ |
 
-`g2b-bid-notice`는 실제 인증키로 6개 오퍼레이션 계열 × 5개 업무구분을 호출해
-응답 필드를 확정했다. 무엇을 확인했고 무엇이 아직 미확인인지는
-[`references/fields.md`](skills/g2b-bid-notice/references/fields.md)에
-구분해 적어 뒀다.
+세 스킬 모두 실제 인증키로 호출해 응답 필드를 확정했다. `mfds-drug-info`는
+전수 4,775건을 받아 필드·중복·검색 동작을 전부 실측했다. **무엇을 확인했고
+무엇이 아직 미확인인지는 각 스킬의 `references/fields.md`에 구분해 적어 뒀다.**
+
+> ⚠️ **같은 포털이라고 규약이 같지 않다.** 봉투 구조·정상 코드 자릿수·파라미터
+> 표기·페이지 상한이 스킬마다 다르다. 비교표는
+> [`mfds-drug-info/references/endpoints.md`](skills/mfds-drug-info/references/endpoints.md)
+> 맨 아래에 있다.
 
 ## 설치 (Claude Code)
 
@@ -89,6 +94,23 @@ uv run skills/molit-real-trade/scripts/molit_api.py search \
 (만원 단위 + 천단위 콤마). 래퍼가 `_dealAmountWon`을 원 단위로 붙인다.
 그리고 이 API는 **잘못된 지역코드·조회월에도 "정상 0건"을 주므로**,
 래퍼가 보내기 전에 형식을 검증하고 0건이면 경고한다.
+
+의약품은 이렇게 쓴다:
+
+```bash
+# 증상으로 약 찾기 — 목록은 brief 로 (본문이 한 건에 수천 자다)
+uv run skills/mfds-drug-info/scripts/mfds_api.py search \
+  --efficacy 두통 --preset brief --limit 500 --output out/drug.json
+
+# 특정 약 한 건만 전문으로
+uv run skills/mfds-drug-info/scripts/mfds_api.py search \
+  --name 타이레놀 --preset full --output out/tylenol.json
+```
+
+이 API의 함정은 **모르는 파라미터를 조용히 무시하고 전체 4,775건을 돌려준다는 것**이다.
+필터가 안 먹었는데 정상 응답이라 알아채기 어렵다. 래퍼가 화이트리스트로 막고,
+결과 건수가 전체와 같으면 경고한다. `updateDe`는 **9자 이상이면 무조건 0건**이라
+전송 전에 차단한다(응답에는 `2024-05-09` 형태로 오는데 그 값으로는 검색이 안 된다).
 
 `.env.example`을 복사해 써도 된다 — `cp .env.example .env` 후 값만 채운다.
 래퍼는 현재 디렉터리에서 `.git`이 있는 곳까지 거슬러 올라가며 `.env`를 찾으므로,
