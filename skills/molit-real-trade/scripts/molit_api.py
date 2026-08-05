@@ -635,6 +635,42 @@ def write_output(path: str, meta: dict, items: list[dict], raw: list[dict] | Non
             "   '거래가 없다'고 단정하기 전에 코드와 월을 확인할 것.\n"
             "   지역코드 확인: molit_api.py lawd-code find <지역명>"
         )
+    _warn_month_gaps(meta)
+
+
+def _warn_month_gaps(meta: dict) -> None:
+    """일부 월만 비었거나 최근 월이 섞였을 때 시끄럽게 알린다.
+
+    2026-08-05 실사용 검증에서 드러난 구멍이다. 전체가 0건일 때만 경고가 떠서,
+    3개월을 요청했는데 한 달이 0건이어도 조용히 지나갔다.
+    "3개월 평균"이 실제로는 2개월 평균이 되는데 아무도 모른다.
+    """
+    counts = meta.get("count_by_month") or {}
+    if not counts or not meta.get("total_count"):
+        return
+
+    empty = sorted(ym for ym, n in counts.items() if not n)
+    if empty:
+        print(
+            f"⚠ 요청한 월 {len(counts)}개 중 {len(empty)}개가 0건이다: {', '.join(empty)}\n"
+            "   전체가 0건이 아니라서 위 경고에 안 걸린다. **그 달을 '거래 없음'으로\n"
+            "   보고하지 말 것.** 평균·추이를 낼 때도 그 달이 빠진 것을 밝혀야 한다."
+        )
+
+    today = _dt.date.today()
+    current = f"{today.year:04d}{today.month:02d}"
+    prev_day = today.replace(day=1) - _dt.timedelta(days=1)
+    previous = f"{prev_day.year:04d}{prev_day.month:02d}"
+    recent = sorted(ym for ym in counts if ym in (current, previous))
+    if recent:
+        print(
+            f"🔴 조회 범위에 최근 월이 있다: {', '.join(recent)}\n"
+            "   부동산 거래신고 기한이 계약 후 30일이라 **최근 1~2개월은 아직 덜 찼다.**\n"
+            "   실측(강남구, 2026-08-05 조회): 202605=459 · 202606=222 · 202607=112 · 202608=0\n"
+            "   → 시장이 식은 게 아니라 신고가 안 들어온 것이다.\n"
+            "   **최근 월로 '거래량이 줄었다'는 결론을 내지 말 것.** 시세도 표본이 작아\n"
+            "   흔들린다. 추이를 볼 거면 최근 2개월을 빼거나 미완성임을 함께 보고한다."
+        )
 
 
 # ---------------------------------------------------------------------------
