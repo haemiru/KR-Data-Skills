@@ -77,7 +77,7 @@ AMOUNT_FIELDS = ("dealAmount", "deposit", "monthlyRent", "preDeposit", "preMonth
 ERROR_HINTS = {
     "12": "그런 경로가 없다. 오퍼레이션명을 확인할 것.",
     "20": "서비스 접근이 거부됐다. 활용신청 상태를 확인할 것.",
-    "22": "일일 트래픽 한도를 초과했다(개발계정 기본 1,000건/일).",
+    "22": "일일 트래픽 한도를 초과했다(실거래가 계열 개발계정 10,000건/일).",
     "30": f"등록되지 않은 서비스키다. 저장소 루트 .env 의 {KEY_NAME} 값과, "
     "**해당 데이터셋의 활용신청 여부**를 확인할 것. "
     "포털 인증키는 하나지만 활용신청은 데이터셋마다 따로 해야 한다. "
@@ -721,7 +721,7 @@ def cmd_search(client: Client, args) -> None:
     if planned > args.max_calls:
         raise MolitError(
             f"예상 호출이 최소 {planned}회다(지역 {len(regions)} × 월 {len(months)}, "
-            f"상한 {args.max_calls}). 개발계정은 일 1,000건이다.\n"
+            f"상한 {args.max_calls}). 실거래가 개발계정은 일 10,000건이다.\n"
             "  범위를 좁히거나 --max-calls 를 올릴 것."
         )
     if planned >= 20:
@@ -945,7 +945,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--max-months", type=int, default=24,
                    help="조회월 개수 상한 (기본 24). 월마다 최소 1회 호출이다.")
     p.add_argument("--max-calls", type=int, default=120,
-                   help="지역×월 예상 호출 상한 (기본 120). 개발계정 일 1,000건 보호용.")
+                   help="지역×월 예상 호출 상한 (기본 120). 예산 사고 방지용.")
     add_common(p)
     p.set_defaults(func=cmd_search, needs_key=True)
 

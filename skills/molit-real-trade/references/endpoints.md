@@ -39,6 +39,30 @@ uv run scripts/molit_api.py probe-endpoints --output references/endpoint-probe.j
 즉 `code 30`은 "키가 틀렸다"가 아니라 **"이 키로 이 데이터셋을 못 쓴다"** 이다.
 키를 의심하기 전에 활용신청 목록을 볼 것.
 
+### 활용신청 URL (확인된 것)
+
+전부 **자동승인**이라 신청 즉시 쓸 수 있다. 개발계정 트래픽은 **일 10,000건**
+(나라장터 1,000건과 다르다 — 2026-08-05 포털에서 확인).
+
+| 데이터셋 | `--type` | 활용신청 |
+|---|---|---|
+| 아파트 매매 실거래가 **상세** | `apt-trade` | https://www.data.go.kr/data/15126468/openapi.do |
+| 아파트 매매 실거래가 | `apt-trade-old` | https://www.data.go.kr/data/15126469/openapi.do |
+| 아파트 전월세 실거래가 | `apt-rent` | https://www.data.go.kr/data/15126474/openapi.do |
+| **아파트 분양권전매 실거래가** | `silv-trade` | https://www.data.go.kr/data/15126471/openapi.do |
+| 오피스텔 매매 실거래가 | `offi-trade` | https://www.data.go.kr/data/15126464/openapi.do |
+| 단독/다가구 매매 실거래가 | `sh-trade` | https://www.data.go.kr/data/15126465/openapi.do |
+| 단독/다가구 전월세 실거래가 | `sh-rent` | https://www.data.go.kr/data/15126472/openapi.do |
+| 토지 매매 실거래가 | `land-trade` | https://www.data.go.kr/data/15126466/openapi.do |
+| 상업업무용 부동산 매매 실거래가 | `nrg-trade` | https://www.data.go.kr/data/15126463/openapi.do |
+
+> 오피스텔 전월세 · 연립다세대 매매/전월세 · 공장창고는 **데이터셋 번호를
+> 확인하지 못했다.** 포털에서 "실거래가"로 검색하면 나온다. 추측한 번호를
+> 적어 두면 헛걸음하게 되므로 비워 둔다.
+>
+> 구 데이터셋 번호 `15056782`(분양권전매)는 **404**다. 폐기됐다.
+> 검색 결과에 아직 걸리므로 주의할 것.
+
 ## 생존 확인된 오퍼레이션 13개
 
 ### 매매
@@ -169,7 +193,7 @@ uv run scripts/molit_api.py lawd-code fetch
 |---|---|---|
 | `12` | NO_OPENAPI_SERVICE_ERROR | 경로/오퍼레이션명 오류 |
 | `20` | 서비스 접근 거부 | 활용신청 상태 확인 |
-| `22` | 트래픽 초과 | 개발계정 일 1,000건 |
+| `22` | 트래픽 초과 | **개발계정 일 10,000건**(실거래가 계열. 나라장터는 1,000건이라 다르다) |
 | `30` | 등록되지 않은 서비스키 | **키 오류가 아니라 데이터셋 미신청일 가능성이 높다** |
 | `31` | 활용기간 만료 | 연장 신청 |
 | `32` | 등록되지 않은 IP | 포털에서 IP 등록 확인 |
@@ -184,5 +208,6 @@ uv run scripts/molit_api.py lawd-code fetch
 지역 1곳 × 5년(60개월)           = 60회
 ```
 
-개발계정 일 1,000건 기준으로 금방 찬다. 래퍼의 `--max-months`(기본 24)가
+개발계정 일 10,000건 기준으로도 지역을 여럿 잡으면 금방 찬다.
+래퍼의 `--max-months`(기본 24)와 `--max-calls`(기본 120)가
 사고를 막는 안전장치다.
