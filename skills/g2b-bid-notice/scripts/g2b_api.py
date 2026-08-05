@@ -173,7 +173,7 @@ def load_service_key() -> str:
         "  발급: https://www.data.go.kr/data/15129394/openapi.do 에서 활용신청(자동승인)\n"
         "  등록(터미널에서 직접 실행, 입력은 화면에 안 보인다):\n"
         f'    printf "Enter {KEY_NAME} (typing hidden): " && read -s val && echo '
-        f'&& echo "{KEY_NAME}=$val" >> .env && echo "Saved."\n'
+        f'&& echo "{KEY_NAME}=$val" >> ~/.claude/.env && echo "Saved."\n'
         "  (저장소 루트에서 실행할 것. 하위 폴더에서 실행하면 거기에 .env 가 생긴다)"
     )
 

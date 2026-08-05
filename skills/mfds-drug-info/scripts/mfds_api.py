@@ -183,9 +183,9 @@ def load_service_key() -> str:
         "  · 스킬을 설치해 쓰는 중이면 → ~/.claude/.env  (권장)\n"
         "  · 또는 환경변수로 직접 지정\n"
         "  발급: https://www.data.go.kr/data/15075057/openapi.do → 활용신청 → 개발계정(자동승인)\n"
-        "  등록(저장소 루트에서 실행. 붙여넣고 엔터를 친 뒤에 키를 입력한다):\n"
+        "  등록 (붙여넣고 **엔터를 친 뒤에** 키를 입력한다. 입력은 화면에 안 보인다):\n"
         f'    printf "Enter {KEY_NAME} (typing hidden): " && read -s val && echo '
-        f'&& echo "{KEY_NAME}=$val" >> .env && echo "Saved."'
+        f'&& echo "{KEY_NAME}=$val" >> ~/.claude/.env && echo "Saved."'
     )
 
 

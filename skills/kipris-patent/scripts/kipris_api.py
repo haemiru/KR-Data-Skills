@@ -184,7 +184,7 @@ def load_service_key() -> str:
         "        → 마이페이지 > API KEY 관리\n"
         "  등록(저장소 루트에서. 붙여넣고 엔터를 친 뒤에 키를 입력한다):\n"
         f'    printf "Enter {KEY_NAME} (typing hidden): " && read -s val && echo '
-        f'&& echo "{KEY_NAME}=$val" >> .env && echo "Saved."'
+        f'&& echo "{KEY_NAME}=$val" >> ~/.claude/.env && echo "Saved."'
     )
 
 
