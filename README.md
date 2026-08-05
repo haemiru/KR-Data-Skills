@@ -25,6 +25,7 @@
 | [`g2b-bid-notice`](skills/g2b-bid-notice) | 조달청 나라장터 입찰공고 — 목록·조건검색·기초금액·면허제한·참가가능지역·변경이력 (오퍼레이션 18개) | ✅ **실데이터 검증 완료** |
 | [`molit-real-trade`](skills/molit-real-trade) | 국토교통부 실거래가 — 아파트·오피스텔·연립·단독 매매/전월세, 토지·상업업무용·공장창고 (오퍼레이션 13개) | ✅ **실데이터 검증 완료** |
 | [`mfds-drug-info`](skills/mfds-drug-info) | 식약처 의약품개요정보(e약은요) — 효능·사용법·주의사항·상호작용·부작용·보관법을 제품명·업체명·증상으로 조회 | ✅ **실데이터 검증 완료** |
+| [`kipris-patent`](skills/kipris-patent) | KIPRISPlus 특허·실용 공개·등록공보 — 발명명칭·출원인·IPC·초록 검색 + 서지상세·공개전문 (⚠️ **data.go.kr 아님**, 별도 키) | ✅ 오퍼레이션 5개 실측 |
 | [`credentials`](skills/credentials) | 인증키 안전 취급 프로토콜 | ✅ |
 | [`uv`](skills/uv) | Python 실행 환경 보장 | ✅ |
 
@@ -34,8 +35,20 @@
 
 > ⚠️ **같은 포털이라고 규약이 같지 않다.** 봉투 구조·정상 코드 자릿수·파라미터
 > 표기·페이지 상한이 스킬마다 다르다. 비교표는
-> [`mfds-drug-info/references/endpoints.md`](skills/mfds-drug-info/references/endpoints.md)
+> [`kipris-patent/references/endpoints.md`](skills/kipris-patent/references/endpoints.md)
 > 맨 아래에 있다.
+
+### 인증키는 하나가 아니다
+
+`DATA_GO_KR_SERVICE_KEY` 하나로 data.go.kr 계열 스킬을 전부 쓴다. 다만
+**`kipris-patent`는 별도 키**(`KIPRIS_PLUS_SERVICE_KEY`)가 필요하다 —
+공공데이터포털의 KIPRISPlus 데이터셋은 `API 유형 = LINK`라 포털에서 활용신청 자체가
+안 되고, `plus.kipris.or.kr`에 따로 가입해야 한다.
+
+> **포털 상세 페이지에 `활용신청`이 아니라 `바로가기` 버튼만 있으면 그 부류다.**
+> 포털 키로는 호출되지 않는다.
+
+`.env.example`에 두 변수가 다 들어 있다.
 
 ## 설치 (Claude Code)
 
