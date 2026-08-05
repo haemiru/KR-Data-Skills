@@ -140,19 +140,78 @@ monthlyRent "70"         → 700,000원
 `landUse` · `floor` · `buildYear` · `buyerGbn` · `slerGbn` ·
 `shareDealingType` · `sggNm`
 
-## 9. 미확인
+## 9. 공장창고 매매 — 22개 ✅
+
+`RTMSDataSvcInduTrade`. **상업업무용과 필드 집합이 같다.**
+서울 종로구엔 거래가 없어서 시흥시(`41390`)로 확인했다.
+
+공통 11개 + `buildingAr` · `plottageAr` · `buildingType`(**`집합` `일반`**) ·
+`buildingUse`(**`공장`** 등) · `landUse`(`준주거` 등) · `floor` · `buildYear` ·
+`buyerGbn` · `slerGbn`(**`기타`** 값도 있다) · `shareDealingType` · `sggNm`
+
+## 10. 전월세 4종 비교 ✅
+
+아파트 25 · 오피스텔 18 · 연립다세대 18 · 단독다가구 **15**개.
+
+| 필드 | 아파트 | 오피스텔 | 연립다세대 | 단독다가구 |
+|---|---|---|---|---|
+| `deposit` · `monthlyRent` | ✅ | ✅ | ✅ | ✅ |
+| `preDeposit` · `preMonthlyRent` | ✅ | ✅ | ✅ | ✅ |
+| `contractTerm` · `contractType` · `useRRRight` | ✅ | ✅ | ✅ | ✅ |
+| `buildYear` · `sggCd` · `umdNm` | ✅ | ✅ | ✅ | ✅ |
+| 건물명 | `aptNm` | `offiNm` | `mhouseNm` | **없음** |
+| `excluUseAr`(전용면적) | ✅ | ✅ | ✅ | **없음** → `totalFloorAr` |
+| `floor` | ✅ | ✅ | ✅ | **없음** |
+| `jibun` | ✅ | ✅ | ✅ | **없음** |
+| `sggNm` | 없음 | ✅ | 없음 | 없음 |
+| `houseType` | 없음 | 없음 | ✅ (`다세대`) | ✅ (`단독`) |
+| 도로명 계열(`roadnm*`) | ✅ | 없음 | 없음 | 없음 |
+| `aptSeq` | ✅ | 없음 | 없음 | 없음 |
+
+> **단독다가구 전월세가 가장 빈약하다** — 층·지번·전용면적·건물명이 전부 없다.
+> 위치는 `umdNm`(읍면동)까지만, 규모는 `totalFloorAr`(연면적)만 나온다.
+> 그래서 `_name` 파생 필드도 생기지 않는다.
+>
+> **도로명 필드는 아파트 전월세에만 있다.** 나머지 3종엔 아예 없다.
+>
+> `mhouseNm`이 `(1-833)` 처럼 **지번 형태로 오는 경우가 있다.** 건물명이
+> 등록 안 된 다세대가 그렇다. 건물명으로 알고 그대로 보여 주면 이상해 보인다.
+
+## 11. 🔴 해제된 거래 — `cdealType` ✅ 실측
+
+값이 확정됐다.
+
+| `cdealType` | 뜻 | 실측 비율 |
+|---|---|---|
+| `` (공란) | 정상 거래 | 2,829 / 2,900 |
+| `O` | **해제된 거래** | **71 / 2,900 = 2.45%** |
+
+`cdealDay`는 해제일이고 형식이 **`26.07.13`(YY.MM.DD)** 이다 —
+`_dealDate`(`YYYY-MM-DD`)와도, `DEAL_YMD`(`YYYYMM`)와도 다른 세 번째 형식이다.
+
+```
+계약 2026-07-25  →  해제 2026-08-04   525,000,000원
+계약 2026-07-10  →  해제 2026-07-13   663,000,000원
+```
+
+> **시세·평균가·최고가를 낼 때 해제 거래를 빼야 한다.**
+> 2.45%면 무시할 수 없고, 특히 최고가는 한 건만 섞여도 답이 바뀐다.
+>
+> 래퍼가 `_cancelled`(bool) · `_cancelledDate`(정규화)를 붙이고,
+> 해제 건이 있으면 **경고를 출력**한다. `--exclude-cancelled` 로 제외한다.
+> **기본은 포함**이다 — 데이터를 조용히 버리지 않기 위해서다.
+
+## 12. 미확인
 
 정직하게 적어 둔다.
 
 | 항목 | 상태 |
 |---|---|
-| 공장창고 매매(`indu-trade`) 필드 | ❌ 표본 지역·월에 거래가 0건이라 못 봤다 |
-| 분양권 전매(`silv-trade`) 필드 | ❌ **해당 데이터셋 활용신청 미완료**(`code 30`) |
-| 오피스텔·연립·단독 **전월세** 필드 | ❌ 아파트 전월세만 확인. 나머지는 미확인 |
+| 분양권 전매(`silv-trade`) 필드 | ❌ **해당 데이터셋 활용신청 미완료**(`code 30`). 신청하면 즉시 확인 가능 |
 | `apt-trade-old`(구버전) 필드 차이 | ❌ 경로 생존만 확인 |
-| `cdealType` 값 목록 | ❌ 표본에서 전부 공란 |
 | `buildingUse` · `jimok` · `landUse` 값 목록 | 🟡 일부만 관측 |
-| 채움률 전반 | 🟡 표본이 한 지역·한 달이라 일반화 불가 |
+| `useRRRight`(갱신요구권) 값 목록 | 🟡 표본에서 대부분 공란 |
+| 채움률 전반 | 🟡 표본이 좁아 일반화 불가 |
 
 ## 10. 파생 필드 (래퍼가 계산)
 
@@ -166,5 +225,8 @@ monthlyRent "70"         → 700,000원
 | `_area` / `_areaField` | `excluUseAr` → `dealArea` → `totalFloorAr` → `buildingAr` → `plottageAr` 순, 그리고 어느 것을 썼는지 |
 | `_dealDate` | `dealYear`-`dealMonth`-`dealDay` 를 `YYYY-MM-DD`로 |
 | `_dealYm` | 그 행을 가져온 조회월 |
+| `_cancelled` | `cdealType == "O"` 이면 `true` — **해제된 거래** |
+| `_cancelledDate` | `cdealDay`(`26.07.13`)를 `2026-07-13` 로 |
+| `_lawdCd` / `_regionName` | 그 행을 가져온 시군구 코드 / 이름 |
 
 `--fields`로 필드를 걸러도 파생 필드는 항상 남는다.

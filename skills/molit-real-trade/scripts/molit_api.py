@@ -366,8 +366,25 @@ def enrich(items: list[dict]) -> list[dict]:
         year, month, day = (_clean(row.get(k)) for k in ("dealYear", "dealMonth", "dealDay"))
         if year and month and day:
             row["_dealDate"] = f"{year}-{int(month):02d}-{int(day):02d}"
+        # 해제된 거래. 실측(2026-08-05): 표본 2,900건 중 71건(2.45%)이 해제다.
+        # 시세 분석에 섞이면 결과가 틀어진다 — 특히 최고가·평균가.
+        if _clean(row.get("cdealType")).upper() == "O":
+            row["_cancelled"] = True
+            row["_cancelledDate"] = _norm_short_date(row.get("cdealDay"))
+        elif "cdealType" in row:
+            row["_cancelled"] = False
         out.append(row)
     return out
+
+
+def _norm_short_date(value) -> str | None:
+    """`cdealDay` 는 `26.07.13`(YY.MM.DD)로 온다. 다른 날짜 필드와 형식이 또 다르다."""
+    text = _clean(value)
+    match = re.fullmatch(r"(\d{2})\.(\d{2})\.(\d{2})", text)
+    if not match:
+        return text or None
+    yy, mm, dd = match.groups()
+    return f"20{yy}-{mm}-{dd}"
 
 
 def project(items: list[dict], fields: str | None) -> list[dict]:
@@ -581,10 +598,22 @@ def write_output(path: str, meta: dict, items: list[dict], raw: list[dict] | Non
             f"⚠ --max-items {meta.get('max_items')} 에 걸려 잘렸다. "
             "값을 올리거나 조회 범위를 좁힐 것."
         )
+    cancelled = meta.get("cancelled_count") or 0
+    if cancelled:
+        if meta.get("cancelled_excluded"):
+            print(f"   해제 거래 {cancelled}건을 제외했다 (--exclude-cancelled).")
+        else:
+            print(
+                f"⚠ 해제된 거래가 {cancelled}건 섞여 있다 "
+                "(cdealType='O', _cancelled=true).\n"
+                "   시세·평균가·최고가를 낼 때 빼야 한다. --exclude-cancelled 를 쓰거나\n"
+                "   items 에서 _cancelled 가 true 인 행을 걸러낼 것."
+            )
     if meta.get("total_count") == 0:
         print(
             "🔴 0건이다. 다만 이 API 는 **잘못된 지역코드·조회월에도 0건을 정상 응답으로 준다**(실측).\n"
-            f"   보낸 값: 지역={meta.get('lawd_cd')} 월={','.join(meta.get('months', []))}\n"
+            f"   보낸 값: 지역={', '.join(meta.get('regions', []))} "
+            f"월={','.join(meta.get('months', []))}\n"
             "   '거래가 없다'고 단정하기 전에 코드와 월을 확인할 것.\n"
             "   지역코드 확인: molit_api.py lawd-code find <지역명>"
         )
@@ -644,6 +673,11 @@ def collect(client: Client, operation: str, regions: list[dict], months: list[st
         if truncated:
             break
 
+    enriched = enrich(items)
+    cancelled = sum(1 for r in enriched if r.get("_cancelled"))
+    if getattr(args, "exclude_cancelled", False):
+        enriched = [r for r in enriched if not r.get("_cancelled")]
+
     meta = {
         "operation": operation,
         "endpoint": f"{BASE_URL}/{operation}",
@@ -657,11 +691,13 @@ def collect(client: Client, operation: str, regions: list[dict], months: list[st
         "api_calls": client.call_count,
         "pages_fetched": pages_fetched,
         "total_count": grand_total,
-        "returned": len(items),
+        "fetched": len(items),
+        "returned": len(enriched),
+        "cancelled_count": cancelled,
+        "cancelled_excluded": bool(getattr(args, "exclude_cancelled", False)),
         "truncated": truncated,
         "max_items": args.max_items,
     }
-    enriched = enrich(items)
     return project(enriched, args.fields), meta, (raw_pages if args.keep_raw else None)
 
 
@@ -880,6 +916,11 @@ def add_common(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("--max-pages", type=int, default=5, help="월당 최대 페이지 (기본 5).")
     parser.add_argument("--max-items", type=int, default=5000, help="총 수집 상한 (기본 5000).")
     parser.add_argument("--keep-raw", action="store_true", help="원본 응답을 _raw 에 함께 저장.")
+    # argparse 는 help 문자열에 %-포매팅을 적용한다. 퍼센트 기호는 %% 로 써야 한다.
+    # "2.45%가" 로 뒀다가 `search --help` 가 통째로 죽었다.
+    parser.add_argument("--exclude-cancelled", action="store_true",
+                        help="해제된 거래(cdealType='O')를 제외한다. "
+                             "시세·평균가를 낼 때 권장. 실측 2.45%% 가 해제 거래다.")
     parser.add_argument("--qps", type=float, default=DEFAULT_QPS, help="초당 요청 수 상한.")
     parser.add_argument("--timeout", type=int, default=30, help="요청 타임아웃(초).")
 

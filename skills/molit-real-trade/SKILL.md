@@ -112,18 +112,22 @@ uv run scripts/molit_api.py search --type apt-trade --region "11110,11140" --mon
 
 #### 거래 유형
 
-| `--type` | 내용 | 상태 |
-|---|---|---|
-| `apt-trade` | 아파트 매매 | ✅ |
-| `apt-rent` | 아파트 전월세 | ✅ |
-| `offi-trade` / `offi-rent` | 오피스텔 매매 / 전월세 | ✅ |
-| `rh-trade` / `rh-rent` | 연립다세대 매매 / 전월세 | ✅ |
-| `sh-trade` / `sh-rent` | 단독다가구 매매 / 전월세 | ✅ |
-| `land-trade` | 토지 매매 | ✅ |
-| `nrg-trade` | 상업업무용 매매 | ✅ |
-| `indu-trade` | 공장창고 매매 | ✅ |
-| `apt-trade-old` | 아파트 매매(구버전 오퍼레이션) | 경로 생존. 기본은 `apt-trade` |
-| `silv-trade` | 분양권 전매 | ⚠️ **별도 활용신청 필요** (기본 키로 `code 30`) |
+| `--type` | 내용 | 필드 수 | 상태 |
+|---|---|---|---|
+| `apt-trade` | 아파트 매매 | 32 | ✅ 실측 |
+| `apt-rent` | 아파트 전월세 | 25 | ✅ 실측 |
+| `offi-trade` / `offi-rent` | 오피스텔 매매 / 전월세 | 18 / 18 | ✅ 실측 |
+| `rh-trade` / `rh-rent` | 연립다세대 매매 / 전월세 | 20 / 18 | ✅ 실측 |
+| `sh-trade` / `sh-rent` | 단독다가구 매매 / 전월세 | 17 / **15** | ✅ 실측 |
+| `land-trade` | 토지 매매 | 16 | ✅ 실측 |
+| `nrg-trade` | 상업업무용 매매 | 22 | ✅ 실측 |
+| `indu-trade` | 공장창고 매매 | 22 | ✅ 실측 |
+| `apt-trade-old` | 아파트 매매(구버전 오퍼레이션) | ? | 경로 생존만. 기본은 `apt-trade` |
+| `silv-trade` | 분양권 전매 | ? | ⚠️ **별도 활용신청 필요** (`code 30`) |
+
+> **`sh-rent`(단독다가구 전월세)가 가장 빈약하다** — 층·지번·전용면적·건물명이
+> 전부 없다. 위치는 읍면동까지, 규모는 연면적만 나온다. 이걸 모르고
+> "몇 층이냐"고 물으면 답이 안 나온다.
 
 ### 2. 지역코드 — `lawd-code`
 
@@ -191,9 +195,28 @@ monthlyRent "70"        → 70만원
 | `_area` / `_areaField` | 대표 면적 + 그게 어느 필드였는지 |
 | `_dealDate` | `YYYY-MM-DD` 계약일 |
 | `_dealYm` | 그 행이 어느 조회월에서 왔는지 |
+| `_cancelled` / `_cancelledDate` | **해제된 거래인지** / 해제일 |
+| `_lawdCd` / `_regionName` | 어느 시군구에서 온 거래인지 |
 
 > `_` 로 시작하는 것은 **래퍼가 계산한 값**이다. API가 준 값이 아니다.
 > `--fields`로 걸러도 파생 필드는 항상 남는다.
+
+## 🔴 해제된 거래를 빼야 한다
+
+실측: 표본 2,900건 중 **71건(2.45%)이 해제된 거래**다(`cdealType == "O"`).
+
+**시세·평균가·최고가를 낼 때 반드시 빼야 한다.** 2.45%면 무시할 수 없고,
+최고가는 한 건만 섞여도 답이 바뀐다.
+
+```bash
+uv run scripts/molit_api.py search --type apt-trade --region 43113 \
+  --from 202607 --to 202607 --exclude-cancelled --output out/x.json
+#   해제 거래 12건을 제외했다 (--exclude-cancelled).
+```
+
+**기본은 포함**이다 — 데이터를 조용히 버리지 않기 위해서. 대신 해제 건이
+있으면 경고를 출력하고 `_cancelled` / `_cancelledDate` 를 붙인다.
+`_meta.cancelled_count` 로도 확인할 수 있다.
 
 ## 유형마다 필드가 다르다
 
