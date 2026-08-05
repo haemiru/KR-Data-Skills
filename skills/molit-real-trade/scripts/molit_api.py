@@ -468,29 +468,95 @@ def load_lawd_table() -> list[dict]:
         return []
 
 
-def resolve_region(value: str) -> str:
-    """`--region` 을 5자리 코드로 확정한다. 코드면 그대로, 이름이면 표에서 찾는다."""
-    value = _clean(value)
-    if LAWD_RE.match(value):
-        return value
+def _children_of(code: str, table: list[dict]) -> list[dict]:
+    """그 시군구 아래에 '구'가 있으면 돌려준다.
+
+    🔴 이게 왜 필요한가 — 실측(2026-08-05):
+      43110 청주시(상위)   -> 0건
+      43111 청주시 상당구  -> 173건
+      43113 청주시 흥덕구  -> 342건
+    **구가 있는 시는 상위 코드로 조회하면 0건이 온다.** 그런데 에러가 아니라
+    "정상 0건"이라 "그 도시엔 거래가 없다"는 오답을 낳는다. 자동으로 펼친다.
+    """
+    by_code = {r["code"]: r["name"] for r in table}
+    name = by_code.get(code)
+    if not name:
+        return []
+    depth = name.count(" ")
+    return [
+        r
+        for r in table
+        if r["code"] != code
+        and r["name"].startswith(name + " ")
+        and r["name"].count(" ") == depth + 1
+    ]
+
+
+def resolve_regions(value: str) -> tuple[list[dict], list[tuple[str, str]]]:
+    """`--region` 을 조회할 시군구 목록으로 확정한다.
+
+    쉼표로 여러 개를 받는다. 코드면 그대로, 이름이면 표에서 찾는다.
+    구가 있는 시는 하위 구로 자동 확장한다.
+
+    Returns:
+      (조회할 [{code, name}] 목록, 확장 안내 [(원래이름, 확장결과)] 목록)
+    """
     table = load_lawd_table()
-    if not table:
-        raise MolitError(
-            f"지역명 {value!r} 을 코드로 바꿀 표가 없다.\n"
-            "  5자리 시군구코드를 직접 주거나, 먼저 표를 받을 것:\n"
-            "    molit_api.py lawd-code fetch\n"
-            "  (행정안전부 법정동코드 API 활용신청이 필요하다 — 자동승인)\n"
-            "  https://www.data.go.kr/data/15077871/openapi.do"
-        )
-    hits = [r for r in table if value in r["name"]]
-    if not hits:
-        raise MolitError(f"지역명 {value!r} 에 맞는 시군구가 없다. lawd-code find 로 찾아볼 것.")
-    if len(hits) > 1:
-        listing = "\n".join(f"    {r['code']}  {r['name']}" for r in hits[:12])
-        raise MolitError(
-            f"지역명 {value!r} 이 {len(hits)}곳과 일치한다. 코드를 직접 지정할 것:\n{listing}"
-        )
-    return hits[0]["code"]
+    by_code = {r["code"]: r["name"] for r in table}
+    wanted: list[dict] = []
+    notes: list[tuple[str, str]] = []
+
+    for token in [t.strip() for t in _clean(value).split(",") if t.strip()]:
+        if LAWD_RE.match(token):
+            code = token
+        elif not table:
+            raise MolitError(
+                f"지역명 {token!r} 을 코드로 바꿀 표가 없다.\n"
+                "  5자리 시군구코드를 직접 주거나, 먼저 표를 받을 것:\n"
+                "    molit_api.py lawd-code fetch\n"
+                "  (행정안전부 법정동코드 API 활용신청이 필요하다 — 자동승인)\n"
+                "  https://www.data.go.kr/data/15077871/openapi.do"
+            )
+        else:
+            hits = [r for r in table if token in r["name"]]
+            # 정확히 일치하는 이름이 있으면 그것을 고른다("청주시" vs "청주시 상당구")
+            exact = [r for r in hits if r["name"].split()[-1] == token]
+            if len(exact) == 1:
+                hits = exact
+            if not hits:
+                raise MolitError(
+                    f"지역명 {token!r} 에 맞는 시군구가 없다. lawd-code find 로 찾아볼 것."
+                )
+            if len(hits) > 1:
+                listing = "\n".join(f"    {r['code']}  {r['name']}" for r in hits[:12])
+                raise MolitError(
+                    f"지역명 {token!r} 이 {len(hits)}곳과 일치한다. 코드를 직접 지정할 것:\n"
+                    f"{listing}"
+                )
+            code = hits[0]["code"]
+
+        children = _children_of(code, table)
+        if children:
+            notes.append(
+                (
+                    by_code.get(code, code),
+                    ", ".join(c["name"].split()[-1] for c in children),
+                )
+            )
+            wanted.extend(children)
+        else:
+            wanted.append({"code": validate_lawd(code), "name": by_code.get(code, code)})
+
+    # 중복 제거(순서 유지)
+    seen: set[str] = set()
+    out = []
+    for r in wanted:
+        if r["code"] not in seen:
+            seen.add(r["code"])
+            out.append(r)
+    if not out:
+        raise MolitError("--region 이 비어 있다.")
+    return out, notes
 
 
 # ---------------------------------------------------------------------------
@@ -527,45 +593,54 @@ def write_output(path: str, meta: dict, items: list[dict], raw: list[dict] | Non
 # ---------------------------------------------------------------------------
 # 수집
 # ---------------------------------------------------------------------------
-def collect(client: Client, operation: str, lawd: str, months: list[str], args):
+def collect(client: Client, operation: str, regions: list[dict], months: list[str], args):
     items: list[dict] = []
     raw_pages: list[dict] = []
     grand_total = 0
     truncated = False
     pages_fetched = 0
-    per_month: dict[str, int] = {}
+    per_region: dict[str, int] = {}
+    per_month: dict[str, int] = {ym: 0 for ym in months}
 
-    for ym in months:
-        page = 1
-        month_total = 0
-        while page <= args.max_pages:
-            payload = client.get(
-                f"{BASE_URL}/{operation}",
-                {
-                    "LAWD_CD": lawd,
-                    "DEAL_YMD": ym,
-                    "pageNo": page,
-                    "numOfRows": min(args.limit, MAX_ROWS_PER_PAGE),
-                },
-            )
-            pages_fetched += 1
-            if args.keep_raw:
-                raw_pages.append(payload)
-            page_items = extract_items(payload)
-            if page == 1:
-                month_total = total_count(payload)
-                grand_total += month_total
-            for row in page_items:
-                row.setdefault("_dealYm", ym)
-            items.extend(page_items)
-            if args.max_items and len(items) > args.max_items:
-                items = items[: args.max_items]
-                truncated = True
+    for region in regions:
+        lawd = region["code"]
+        region_total = 0
+        for ym in months:
+            page = 1
+            while page <= args.max_pages:
+                payload = client.get(
+                    f"{BASE_URL}/{operation}",
+                    {
+                        "LAWD_CD": lawd,
+                        "DEAL_YMD": ym,
+                        "pageNo": page,
+                        "numOfRows": min(args.limit, MAX_ROWS_PER_PAGE),
+                    },
+                )
+                pages_fetched += 1
+                if args.keep_raw:
+                    raw_pages.append(payload)
+                page_items = extract_items(payload)
+                if page == 1:
+                    count = total_count(payload)
+                    grand_total += count
+                    region_total += count
+                    per_month[ym] = per_month.get(ym, 0) + count
+                for row in page_items:
+                    row.setdefault("_dealYm", ym)
+                    row.setdefault("_lawdCd", lawd)
+                    row.setdefault("_regionName", region["name"])
+                items.extend(page_items)
+                if args.max_items and len(items) > args.max_items:
+                    items = items[: args.max_items]
+                    truncated = True
+                    break
+                if len(page_items) < min(args.limit, MAX_ROWS_PER_PAGE):
+                    break
+                page += 1
+            if truncated:
                 break
-            if len(page_items) < min(args.limit, MAX_ROWS_PER_PAGE):
-                break
-            page += 1
-        per_month[ym] = month_total
+        per_region[f"{lawd} {region['name']}"] = region_total
         if truncated:
             break
 
@@ -574,8 +649,9 @@ def collect(client: Client, operation: str, lawd: str, months: list[str], args):
         "endpoint": f"{BASE_URL}/{operation}",
         "type": args.type,
         "type_label": TYPES[args.type][1],
-        "lawd_cd": lawd,
+        "regions": [f"{r['code']} {r['name']}" for r in regions],
         "months": months,
+        "count_by_region": per_region,
         "count_by_month": per_month,
         "requested_at": _dt.datetime.now().isoformat(timespec="seconds"),
         "api_calls": client.call_count,
@@ -594,15 +670,27 @@ def collect(client: Client, operation: str, lawd: str, months: list[str], args):
 # ---------------------------------------------------------------------------
 def cmd_search(client: Client, args) -> None:
     operation, _label = TYPES[args.type]
-    lawd = validate_lawd(resolve_region(args.region))
+    regions, expanded = resolve_regions(args.region)
     months = month_range(args)
+    for parent, kids in expanded:
+        print(f"ℹ {parent} 는 구가 있어 하위로 펼쳤다 → {kids}")
+        print("   (실측: 구가 있는 시는 상위 코드로 조회하면 0건이 온다)")
     if len(months) > args.max_months:
         raise MolitError(
             f"조회월이 {len(months)}개다(상한 {args.max_months}). "
             "이 API 는 월 하나당 최소 1회 호출이라 예산을 크게 먹는다. "
             "--max-months 를 올리거나 범위를 좁힐 것."
         )
-    items, meta, raw = collect(client, operation, lawd, months, args)
+    planned = len(regions) * len(months)
+    if planned > args.max_calls:
+        raise MolitError(
+            f"예상 호출이 최소 {planned}회다(지역 {len(regions)} × 월 {len(months)}, "
+            f"상한 {args.max_calls}). 개발계정은 일 1,000건이다.\n"
+            "  범위를 좁히거나 --max-calls 를 올릴 것."
+        )
+    if planned >= 20:
+        print(f"ℹ 지역 {len(regions)}곳 × {len(months)}개월 = 최소 {planned}회 호출한다.")
+    items, meta, raw = collect(client, operation, regions, months, args)
     write_output(args.output, meta, items, raw)
 
 
@@ -702,20 +790,35 @@ def cmd_lawd_code(client: Client | None, args) -> None:
     # fetch — 행정안전부 법정동코드 API 에서 받아 표를 만든다
     assert client is not None
     regions: dict[str, str] = {}
+    seen_rows = 0
     page = 1
     while page <= args.max_pages:
         payload = client.get(STANREGIN_URL, {"pageNo": page, "numOfRows": 1000, "type": "json"})
         rows = _stanregin_rows(payload)
         if not rows:
             break
+        seen_rows += len(rows)
         for row in rows:
+            # region_cd 10자리 = 시도(2) + 시군구(3) + 읍면동(3) + 리(2)
+            # 시군구 단위 = 읍면동·리가 모두 0 이고 시군구가 0 이 아닌 것.
+            # 문자열 접미사로 판별하면 "2720000000"(대구 남구) 같은 것이 새어 나간다.
+            if _clean(row.get("umd_cd")) != "000":
+                continue
+            if _clean(row.get("ri_cd")) != "00":
+                continue
+            if _clean(row.get("sgg_cd")) in ("", "000"):
+                continue
             code = _clean(row.get("region_cd"))
             name = _clean(row.get("locatadd_nm"))
-            sido = _clean(row.get("locatjuminwon_nm")) or _clean(row.get("sido_cd"))
-            # 시군구 단위만 남긴다: 읍면동 코드(뒤 5자리)가 00000 인 것
-            if len(code) == 10 and code.endswith("00000") and not code.endswith("0000000"):
+            if len(code) == 10 and name:
                 regions[code[:5]] = name
+        print(f"  page {page}: 누적 {seen_rows}행 -> 시군구 {len(regions)}개", file=sys.stderr)
         page += 1
+    else:
+        print(
+            f"⚠ --max-pages {args.max_pages} 에 걸려 멈췄다. 표가 불완전할 수 있다.",
+            file=sys.stderr,
+        )
     if not regions:
         raise MolitError("법정동코드 응답에서 시군구를 못 뽑았다. --keep-raw 로 원본을 확인할 것.")
     table = [{"code": c, "name": n} for c, n in sorted(regions.items())]
@@ -793,12 +896,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--type", choices=sorted(TYPES), default="apt-trade",
                    help="거래 유형: " + ", ".join(f"{k}={v[1]}" for k, v in TYPES.items()))
     p.add_argument("--region", required=True,
-                   help="시군구코드 5자리(예: 11110) 또는 지역명(표가 있을 때).")
+                   help="시군구코드 5자리(예: 11110) 또는 지역명. 쉼표로 여러 개. "
+                        "구가 있는 시(청주시·수원시 등)는 하위 구로 자동 확장한다.")
     p.add_argument("--months", type=int, help="이번 달 포함 최근 N개월.")
     p.add_argument("--from", dest="ym_from", help="조회 시작월 YYYYMM.")
     p.add_argument("--to", dest="ym_to", help="조회 종료월 YYYYMM.")
     p.add_argument("--max-months", type=int, default=24,
                    help="조회월 개수 상한 (기본 24). 월마다 최소 1회 호출이다.")
+    p.add_argument("--max-calls", type=int, default=120,
+                   help="지역×월 예상 호출 상한 (기본 120). 개발계정 일 1,000건 보호용.")
     add_common(p)
     p.set_defaults(func=cmd_search, needs_key=True)
 

@@ -76,10 +76,36 @@ uv run scripts/molit_api.py search \
 | 플래그 | 뜻 |
 |---|---|
 | `--type` | 거래 유형 (아래 표) |
-| `--region` | **시군구코드 5자리** (예: `11110`) 또는 지역명(표가 있을 때) |
+| `--region` | 시군구코드 5자리 또는 **지역명**. 쉼표로 여러 개 |
 | `--months N` | 이번 달 포함 최근 N개월 |
 | `--from` / `--to` | `YYYYMM` 범위 |
-| `--max-months` | 조회월 개수 상한 (기본 24). 예산 안전장치 |
+| `--max-months` | 조회월 개수 상한 (기본 24) |
+| `--max-calls` | 지역×월 예상 호출 상한 (기본 120) |
+
+지역명으로 바로 된다 (`references/lawd-codes.json` 269개 시군구 동봉):
+
+```bash
+uv run scripts/molit_api.py search --type apt-trade --region "청주시" --months 2 --output out/x.json
+uv run scripts/molit_api.py search --type apt-trade --region "11110,11140" --months 2 --output out/x.json
+```
+
+### 🔴 구가 있는 시는 상위 코드로 조회하면 0건이다
+
+실측(2026-08-05):
+
+```
+43110 청주시(상위)   →   0건    ← 에러가 아니다. "거래 없음"으로 오해하게 된다
+43111 청주시 상당구  → 173건
+43113 청주시 흥덕구  → 342건
+```
+
+래퍼가 **자동으로 하위 구를 펼친다.** `--region 청주시`나 `--region 43110`을
+주면 4개 구를 모두 조회하고 안내를 출력한다.
+
+대상 13곳 — 수원·성남·안양·부천·안산·고양·용인·화성·청주·천안·포항·창원·전주.
+
+`_meta.count_by_region`에 구별 건수가, 각 행에 `_lawdCd`·`_regionName`이 남아
+어느 구에서 온 거래인지 추적된다.
 
 > `--months 1`은 **이번 달만**이다. 월초에는 거의 비어 있다.
 > 최근 실거래를 보려면 `--months 2` 이상을 쓰거나 `--from`으로 지난달을 지정한다.
@@ -101,18 +127,28 @@ uv run scripts/molit_api.py search \
 
 ### 2. 지역코드 — `lawd-code`
 
-이 API는 **시군구코드 5자리**로만 조회한다. 사용자는 "청주시"라고 말하므로
-변환이 필요하다.
+**표가 저장소에 동봉돼 있다**(`references/lawd-codes.json`, 269개 시군구).
+그래서 `--region`에 지역명을 바로 쓸 수 있고, 추가 활용신청은 필요 없다.
 
 ```bash
-uv run scripts/molit_api.py lawd-code find 청주      # 이름으로 찾기
-uv run scripts/molit_api.py lawd-code fetch          # 표 내려받기(최초 1회)
+uv run scripts/molit_api.py lawd-code find 청주    # 이름·코드로 찾기
 ```
 
-`fetch`는 행정안전부 법정동코드 API에서 받아
-`references/lawd-codes.json`에 저장한다. **그 데이터셋의 활용신청이 필요하다**
-(https://www.data.go.kr/data/15077871/openapi.do · 자동승인).
-표가 저장소에 이미 있으면 `find`만으로 되고 신청은 불필요하다.
+```
+43110  충청북도 청주시
+43111  충청북도 청주시 상당구
+43112  충청북도 청주시 서원구
+43113  충청북도 청주시 흥덕구
+43114  충청북도 청주시 청원구
+```
+
+표를 다시 받아야 할 때(행정구역 개편 등)만 `fetch`를 쓴다. 이때는
+**행정안전부 법정동코드 데이터셋 활용신청이 필요하다**
+(https://www.data.go.kr/data/15077871/openapi.do · 자동승인). 22회 호출한다.
+
+```bash
+uv run scripts/molit_api.py lawd-code fetch
+```
 
 ### 3. 진단 — `check-key` / `probe-endpoints`
 
@@ -200,6 +236,7 @@ monthlyRent "70"        → 70만원
 | 증상 | 원인 | 해법 |
 |---|---|---|
 | 0건인데 이상하다 | 지역코드·조회월이 틀려도 0건이 온다 | `lawd-code find`로 코드 확인. 래퍼 경고를 읽을 것 |
+| 큰 도시인데 0건 | **구가 있는 시의 상위 코드**를 썼다 | 래퍼가 자동 확장한다. 직접 코드를 넣었다면 하위 구 코드로 |
 | `code 30`인데 키는 맞음 | **그 데이터셋 활용신청을 안 했다** | 해당 데이터셋에서 활용신청. 키 문제가 아니다 |
 | 금액이 이상하게 작다 | 원본이 만원 단위 | `_dealAmountWon` 사용 |
 | `--fields`에 넣은 필드가 없다 | 유형마다 필드가 다름·대소문자 상이 | 위 표 확인. `_name`/`_area` 사용 |
