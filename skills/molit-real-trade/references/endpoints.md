@@ -32,9 +32,9 @@ uv run scripts/molit_api.py probe-endpoints --output references/endpoint-probe.j
 프로빙은 경로 존재만 알려 준다. 그 데이터셋을 신청하지 않았으면
 **실제 키로도 `code 30`** 이 나온다. 실측 예:
 
-- `RTMSDataSvcSilvTrade` — 프로빙 `code 30`(경로 유효), 실제 키로도 `code 30`
-  → 이 계정이 **분양권 전매 데이터셋을 신청하지 않았다**
-- 나머지 12개 — 실제 키로 `resultCode 000` 정상
+실측 예 — `RTMSDataSvcSilvTrade`(분양권 전매)는 프로빙에서 `code 30`(경로 유효)이
+나왔는데 **실제 키로도 `code 30`** 이었다. 키가 틀린 게 아니라 그 데이터셋을
+신청하지 않았던 것이다. 신청 후에는 `resultCode 000` 으로 정상 동작했다.
 
 즉 `code 30`은 "키가 틀렸다"가 아니라 **"이 키로 이 데이터셋을 못 쓴다"** 이다.
 키를 의심하기 전에 활용신청 목록을 볼 것.
@@ -77,7 +77,7 @@ uv run scripts/molit_api.py probe-endpoints --output references/endpoint-probe.j
 | `RTMSDataSvcLandTrade/getRTMSDataSvcLandTrade` | 토지 매매 | `land-trade` |
 | `RTMSDataSvcNrgTrade/getRTMSDataSvcNrgTrade` | 상업업무용 매매 | `nrg-trade` |
 | `RTMSDataSvcInduTrade/getRTMSDataSvcInduTrade` | 공장창고 매매 | `indu-trade` |
-| `RTMSDataSvcSilvTrade/getRTMSDataSvcSilvTrade` | 분양권 전매 | `silv-trade` ⚠️ 미신청 |
+| `RTMSDataSvcSilvTrade/getRTMSDataSvcSilvTrade` | 분양권 전매 | `silv-trade` |
 
 ### 전월세
 

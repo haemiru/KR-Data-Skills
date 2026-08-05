@@ -45,7 +45,7 @@ LEGACY_KEY_NAMES = ("SERVICE_KEY", "DATA_GO_KR_API_KEY", "MOLIT_API_KEY")
 USER_AGENT = "KR-Data-Skills/0.1 (+https://github.com/haemiru/KR-Data-Skills)"
 
 # 거래 유형 -> (오퍼레이션 경로, 한글 이름, 구독 여부)
-# 2026-08-05 실측: 13개 경로 전부 생존. silv-trade 만 활용신청 미완료(code 30).
+# 2026-08-05 실측: 13개 경로 전부 생존. apt-trade-old 만 필드 미확인.
 TYPES: dict[str, tuple[str, str]] = {
     "apt-trade": ("RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev", "아파트 매매"),
     "apt-trade-old": ("RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade", "아파트 매매(구버전)"),
