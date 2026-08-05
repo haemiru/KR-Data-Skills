@@ -19,7 +19,7 @@ KR-Data-Skills의 스킬 대부분은 공공데이터포털(data.go.kr) 인증�
 **핵심: 값을 출력하거나 컨텍스트에 읽어들이지 않고 확인해야 한다.**
 
 ```bash
-grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.env
+grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.claude/.env ~/.env
 ```
 
 `-q`는 내용을 출력하지 않고, `-s`는 파일이 아예 없을 때도 조용히 실패한다.
@@ -27,7 +27,7 @@ grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.env
 
 **`.env`는 저장소 루트에 둔다.** 위 명령은 저장소 루트에서 실행하는 걸 전제한다.
 하위 폴더에서 확인해야 하면 루트 경로를 명시할 것 —
-`grep -sq "^…=" /path/to/repo/.env ~/.env`.
+`grep -sq "^…=" /path/to/repo/.env ~/.claude/.env ~/.env`.
 
 - **종료코드 0** → 키가 있다. 진행한다.
 - **종료코드 0이 아님** → 키가 없다(또는 `.env`가 없다). **즉시 멈추고**

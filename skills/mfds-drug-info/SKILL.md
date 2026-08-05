@@ -27,7 +27,7 @@ description: >
    `DATA_GO_KR_SERVICE_KEY` 하나다. **작업 시작 전에 먼저 확인할 것**:
 
    ```bash
-   grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.env
+   grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.claude/.env ~/.env
    ```
 
    실패하면 즉시 멈추고 사용자에게 발급을 안내한다. 스크립트를 먼저 돌리지 말 것.

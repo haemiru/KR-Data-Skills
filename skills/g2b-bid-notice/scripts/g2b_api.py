@@ -105,27 +105,39 @@ def _parse_env_file(path: pathlib.Path) -> dict[str, str]:
 
 
 def _env_file_candidates() -> list[pathlib.Path]:
-    """`.env` 탐색 경로를 우선순위 순으로 만든다.
+    """`.env` 탐색 경로.
 
-    현재 디렉터리에서 위로 올라가며 찾고, 마지막에 홈 디렉터리를 본다.
-    위로 올라가는 이유: 스크립트를 `skills/<name>/` 안에서 실행해도
-    **저장소 루트의 `.env`**를 찾아야 하기 때문이다.
-    `.git`이 있는 디렉터리까지만 올라간다 — 저장소 밖의 남의 `.env`를
-    주워 오지 않으려고.
+    두 가지 실행 형태를 다 지원해야 한다:
+      1) 저장소 안에서 개발할 때 — 현재 디렉터리에서 `.git` 이 있는 곳까지 거슬러 올라간다
+      2) `~/.claude/skills/` 에 설치해서 쓸 때 — 사용자의 CWD 는 남의 프로젝트다
+
+    2026-08-05 설치 검증에서 2번이 키를 못 찾는 것을 확인하고
+    **스크립트 위치 기준 경로와 `~/.claude/.env` 를 추가**했다.
+
+    우선순위: 환경변수 > 현재 디렉터리~저장소 루트 > 스크립트 위치~상위
+              > `~/.claude/.env` > `~/.env`
     """
     out: list[pathlib.Path] = []
-    try:
-        cwd = pathlib.Path.cwd().resolve()
-    except OSError:
-        cwd = None
-    if cwd is not None:
-        for depth, directory in enumerate((cwd, *cwd.parents)):
-            out.append(directory / ".env")
-            if (directory / ".git").exists() or depth >= 5:
+
+    def walk_up(start: pathlib.Path, limit: int = 5) -> None:
+        for depth, directory in enumerate((start, *start.parents)):
+            candidate = directory / ".env"
+            if candidate not in out:
+                out.append(candidate)
+            if (directory / ".git").exists() or depth >= limit:
                 break
-    home = pathlib.Path.home() / ".env"
-    if home not in out:
-        out.append(home)
+
+    try:
+        walk_up(pathlib.Path.cwd().resolve())
+    except OSError:
+        pass
+    try:  # 설치돼서 실행될 때는 이쪽이 유일한 단서다
+        walk_up(pathlib.Path(__file__).resolve().parent)
+    except (OSError, NameError):
+        pass
+    for extra in (pathlib.Path.home() / ".claude" / ".env", pathlib.Path.home() / ".env"):
+        if extra not in out:
+            out.append(extra)
     return out
 
 
@@ -154,7 +166,10 @@ def load_service_key() -> str:
                 return env[name].strip()
 
     raise G2BError(
-        f"인증키를 찾지 못했다. 저장소 루트의 .env 에 {KEY_NAME} 을 등록할 것.\n"
+        f"인증키를 찾지 못했다. {KEY_NAME} 을 아래 중 한 곳에 등록할 것.\n"
+        "  · 저장소에서 개발 중이면    → 저장소 루트의 .env\n"
+        "  · 스킬을 설치해 쓰는 중이면 → ~/.claude/.env  (권장)\n"
+        "  · 또는 환경변수로 직접 지정\n"
         "  발급: https://www.data.go.kr/data/15129394/openapi.do 에서 활용신청(자동승인)\n"
         "  등록(터미널에서 직접 실행, 입력은 화면에 안 보인다):\n"
         f'    printf "Enter {KEY_NAME} (typing hidden): " && read -s val && echo '

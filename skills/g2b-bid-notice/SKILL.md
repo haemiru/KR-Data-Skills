@@ -17,7 +17,7 @@ description: >
    `DATA_GO_KR_SERVICE_KEY` 하나다. **작업 시작 전에 먼저 확인할 것**:
 
    ```bash
-   grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.env
+   grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.claude/.env ~/.env
    ```
 
    **`.env`는 저장소 루트에 둔다.** 위 명령은 루트에서 실행하는 걸 전제한다.

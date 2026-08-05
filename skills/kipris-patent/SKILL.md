@@ -39,7 +39,7 @@ description: >
 2. **인증키** — `credentials` 스킬의 프로토콜을 따른다. **작업 시작 전에 확인할 것**:
 
    ```bash
-   grep -sq "^KIPRIS_PLUS_SERVICE_KEY=" .env
+   grep -sq "^KIPRIS_PLUS_SERVICE_KEY=" .env ~/.claude/.env ~/.env
    ```
 
    실패하면 즉시 멈추고 위 발급 절차를 안내한다.

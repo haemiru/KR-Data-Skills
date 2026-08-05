@@ -60,6 +60,30 @@ cp -r KR-Data-Skills/skills/* ~/.claude/skills/
 `~/.claude/skills/<이름>/SKILL.md` 구조가 되면 된다. Claude Code가 요청 내용에
 맞는 스킬을 알아서 불러온다.
 
+### 🔴 설치했으면 인증키를 `~/.claude/.env`에 둔다
+
+설치해서 쓸 때는 **작업 디렉터리가 당신의 다른 프로젝트**다. 저장소 루트의
+`.env`는 거기서 안 보인다. 래퍼는 다음 순서로 찾는다:
+
+```
+환경변수  >  현재 디렉터리~저장소 루트의 .env  >  스크립트 위치~상위
+          >  ~/.claude/.env   ← 설치 사용자는 여기  >  ~/.env
+```
+
+```bash
+printf "Enter DATA_GO_KR_SERVICE_KEY (typing hidden): " && read -s val && echo \
+  && echo "DATA_GO_KR_SERVICE_KEY=$val" >> ~/.claude/.env && echo "Saved."
+```
+
+붙여넣고 **엔터를 친 뒤에** 키를 입력한다(입력은 화면에 안 보인다).
+키를 프롬프트 문구 안에 넣지 말 것 — 명령 기록에 평문으로 남는다.
+
+확인:
+
+```bash
+grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.claude/.env ~/.env && echo "키 있음"
+```
+
 > 다른 에이전트(Antigravity/Gemini 등)는 스킬 디렉터리 경로가 다르다. 각 도구
 > 문서를 확인할 것.
 
