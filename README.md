@@ -23,6 +23,7 @@
 | 스킬 | 내용 | 상태 |
 |---|---|---|
 | [`g2b-bid-notice`](skills/g2b-bid-notice) | 조달청 나라장터 입찰공고 — 목록·조건검색·기초금액·면허제한·참가가능지역·변경이력 (오퍼레이션 18개) | ✅ **실데이터 검증 완료** |
+| [`molit-real-trade`](skills/molit-real-trade) | 국토교통부 실거래가 — 아파트·오피스텔·연립·단독 매매/전월세, 토지·상업업무용·공장창고 (오퍼레이션 13개) | ✅ **실데이터 검증 완료** |
 | [`credentials`](skills/credentials) | 인증키 안전 취급 프로토콜 | ✅ |
 | [`uv`](skills/uv) | Python 실행 환경 보장 | ✅ |
 
@@ -75,6 +76,19 @@ uv run skills/g2b-bid-notice/scripts/g2b_api.py search-nara --kind servc --days 
 5번이 이 저장소가 노리는 지점이다. 나라장터 API는 지역으로 **필터링은 되지만
 응답에 지역 필드가 없어서**, 결과가 정말 그 지역인지 응답만으로는 증명할 수 없다.
 `--join region`이 참가가능지역 오퍼레이션을 붙여 근거를 만든다.
+
+실거래가는 이렇게 쓴다:
+
+```bash
+# 서울 종로구 아파트 매매, 최근 3개월
+uv run skills/molit-real-trade/scripts/molit_api.py search \
+  --type apt-trade --region 11110 --months 3 --output out/apt.json
+```
+
+원본 `dealAmount`가 `"273,000"`으로 오는데 **27만원이 아니라 27억 3천만원**이다
+(만원 단위 + 천단위 콤마). 래퍼가 `_dealAmountWon`을 원 단위로 붙인다.
+그리고 이 API는 **잘못된 지역코드·조회월에도 "정상 0건"을 주므로**,
+래퍼가 보내기 전에 형식을 검증하고 0건이면 경고한다.
 
 `.env.example`을 복사해 써도 된다 — `cp .env.example .env` 후 값만 채운다.
 래퍼는 현재 디렉터리에서 `.git`이 있는 곳까지 거슬러 올라가며 `.env`를 찾으므로,
@@ -142,7 +156,8 @@ grep -sq "^DATA_GO_KR_SERVICE_KEY=" .env ~/.env
 - [x] 나라장터 입찰공고 스킬 — 래퍼·문서·엔드포인트 실측
 - [x] 실데이터 검증 → 응답 필드·`inqryDiv`·페이지네이션 확정
 - [x] 검증에서 드러난 구멍 보강 — `--join` · `--dedup` · `--preset`
-- [ ] 국토교통부 실거래가 (아파트·오피스텔·단독·토지 등)
+- [x] 국토교통부 실거래가 (아파트·오피스텔·단독·토지 등 13개 오퍼레이션)
+- [ ] 지역명 ↔ 시군구코드 표 동봉 (`lawd-code fetch` 결과 커밋)
 - [ ] KIPRIS 특허 / 식약처 / 국가법령정보 등 확장
 
 ## 라이선스

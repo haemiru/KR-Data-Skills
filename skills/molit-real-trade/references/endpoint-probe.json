@@ -1,0 +1,96 @@
+{
+  "probed_at": "2026-08-05T08:56:38",
+  "results": [
+    {
+      "type": "apt-trade",
+      "path": "RTMSDataSvcAptTradeDev/getRTMSDataSvcAptTradeDev",
+      "label": "아파트 매매",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "apt-trade-old",
+      "path": "RTMSDataSvcAptTrade/getRTMSDataSvcAptTrade",
+      "label": "아파트 매매(구버전)",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "apt-rent",
+      "path": "RTMSDataSvcAptRent/getRTMSDataSvcAptRent",
+      "label": "아파트 전월세",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "offi-trade",
+      "path": "RTMSDataSvcOffiTrade/getRTMSDataSvcOffiTrade",
+      "label": "오피스텔 매매",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "offi-rent",
+      "path": "RTMSDataSvcOffiRent/getRTMSDataSvcOffiRent",
+      "label": "오피스텔 전월세",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "rh-trade",
+      "path": "RTMSDataSvcRHTrade/getRTMSDataSvcRHTrade",
+      "label": "연립다세대 매매",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "rh-rent",
+      "path": "RTMSDataSvcRHRent/getRTMSDataSvcRHRent",
+      "label": "연립다세대 전월세",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "sh-trade",
+      "path": "RTMSDataSvcSHTrade/getRTMSDataSvcSHTrade",
+      "label": "단독다가구 매매",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "sh-rent",
+      "path": "RTMSDataSvcSHRent/getRTMSDataSvcSHRent",
+      "label": "단독다가구 전월세",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "land-trade",
+      "path": "RTMSDataSvcLandTrade/getRTMSDataSvcLandTrade",
+      "label": "토지 매매",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "nrg-trade",
+      "path": "RTMSDataSvcNrgTrade/getRTMSDataSvcNrgTrade",
+      "label": "상업업무용 매매",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "indu-trade",
+      "path": "RTMSDataSvcInduTrade/getRTMSDataSvcInduTrade",
+      "label": "공장창고 매매",
+      "code": "30",
+      "verdict": "alive"
+    },
+    {
+      "type": "silv-trade",
+      "path": "RTMSDataSvcSilvTrade/getRTMSDataSvcSilvTrade",
+      "label": "분양권 전매",
+      "code": "30",
+      "verdict": "alive"
+    }
+  ]
+}
